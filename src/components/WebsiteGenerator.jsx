@@ -34,6 +34,7 @@ function WebsiteGenerator() {
   const startWidth = useRef(0);
   const containerRef = useRef(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [terminal, setTerminal] = useState(null);
 
   axios.defaults.withCredentials = true;
 
@@ -364,7 +365,7 @@ export default defineConfig({
       if (errorCode) {
         errorFreeCode = await axios.post(
           // "https://weblyss.onrender.com/api/errorcorrection",
-          "http://localhost:3001/api/errorcorrection",
+          "http://localhost:3000/api/errorcorrection",
           {
             code: codeResponse,
             error: errorCode,
@@ -438,11 +439,36 @@ export default defineConfig({
   const fetchCommandAndRun = async (inputWriter, terminal) => {
     try {
       const dependencies = localStorage.getItem("dependencies");
-      const response = await axios.get(
-        // "https://weblyss.onrender.com/api/get-command",
-        "http://localhost:3001/api/get-command",
-        { dependencies }
-      );
+      
+      // Add retry logic for network requests
+      const maxRetries = 3;
+      let retryCount = 0;
+      let response;
+
+      while (retryCount < maxRetries) {
+        try {
+          response = await axios.get(
+            "http://localhost:3000/api/get-command",
+            { 
+              dependencies,
+              timeout: 10000, // 10 second timeout
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              }
+            }
+          );
+          break; // If successful, break the retry loop
+        } catch (error) {
+          retryCount++;
+          if (retryCount === maxRetries) {
+            throw error; // If all retries failed, throw the error
+          }
+          terminal.writeln(`Retrying command fetch (attempt ${retryCount}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+        }
+      }
+
       const {
         command,
         secondCommand,
@@ -453,19 +479,19 @@ export default defineConfig({
 
       if (command) {
         terminal.writeln(`Executing: ${command}`);
-        await executeCommand(inputWriter, terminal, command, 2000); // Wait for execution
+        await executeCommand(inputWriter, terminal, command, 2000);
       } else {
         terminal.writeln("No command received from backend.");
       }
 
       if (dependencies) {
-        terminal.writeln(`Executing: npm i ${dependencies}`);
+        terminal.writeln(`Installing dependencies: ${dependencies}`);
         await executeCommand(
           inputWriter,
           terminal,
           `npm i ${dependencies}`,
           5000
-        ); // Wait for execution
+        );
       } else {
         terminal.writeln("No dependencies found.");
       }
@@ -489,7 +515,20 @@ export default defineConfig({
       terminal.writeln("Running ViteBuilder...");
       runViteBuild(webContainerRef.current);
     } catch (error) {
-      terminal.writeln(`Error fetching command: ${error.message}`);
+      console.error("Error in fetchCommandAndRun:", error);
+      terminal.writeln(`Error: ${error.message}`);
+      
+      if (error.code === 'ECONNABORTED') {
+        terminal.writeln("Request timed out. Please check if the backend server is running.");
+      } else if (error.code === 'ERR_NETWORK') {
+        terminal.writeln("Network error. Please check if the backend server is running at http://localhost:3000");
+      } else {
+        terminal.writeln("An error occurred while fetching commands. Please try again.");
+      }
+      
+      // Try to continue with basic setup even if command fetch fails
+      terminal.writeln("Attempting to continue with basic setup...");
+      await checkDependenciesInstalled(inputWriter, terminal);
     }
   };
 
@@ -531,21 +570,22 @@ export default defineConfig({
     const boot = async () => {
       if (!code || !isInitialized || !webContainerRef.current) return;
 
-      const terminal = new Terminal({ convertEol: true, cursorBlink: true });
-      terminal.open(terminalRef.current);
-      terminal.writeln("Welcome to WebContainer Terminal!");
+      const newTerminal = new Terminal({ convertEol: true, cursorBlink: true });
+      newTerminal.open(terminalRef.current);
+      newTerminal.writeln("Welcome to WebContainer Terminal!");
+      setTerminal(newTerminal);
 
       try {
         await webContainerRef.current.mount(code);
 
         const shellProcess = await webContainerRef.current.spawn("jsh", {
-          terminal: { cols: terminal.cols, rows: terminal.rows },
+          terminal: { cols: newTerminal.cols, rows: newTerminal.rows },
         });
 
         shellProcess.output.pipeTo(
           new WritableStream({
             write(data) {
-              terminal.write(data);
+              newTerminal.write(data);
             },
           })
         );
@@ -553,16 +593,16 @@ export default defineConfig({
         const inputWriter = shellProcess.input.getWriter();
         inputWriterRef.current = inputWriter;
 
-        terminal.onData((data) => {
+        newTerminal.onData((data) => {
           inputWriter.write(data);
         });
 
-        await fetchCommandAndRun(inputWriter, terminal);
+        await fetchCommandAndRun(inputWriter, newTerminal);
 
         webContainerRef.current.on("server-ready", (port, url) => {
           const serverUrl = `http://${url}:${port}`;
           setSource(url);
-          terminal.writeln(`Server running at ${serverUrl}`);
+          newTerminal.writeln(`Server running at ${serverUrl}`);
         });
       } catch (error) {
         console.error("Error during WebContainer boot:", error);
@@ -581,9 +621,31 @@ export default defineConfig({
     setErrors("");
     
     try {
-      const terminal = new Terminal({ convertEol: true, cursorBlink: true });
-      terminal.open(terminalRef.current);
-      terminal.writeln("Rebuilding project...");
+      // Create new terminal instance
+      const newTerminal = new Terminal({ convertEol: true, cursorBlink: true });
+      newTerminal.open(terminalRef.current);
+      newTerminal.writeln("Rebuilding project...");
+      setTerminal(newTerminal);
+
+      // Get the shell process
+      const shellProcess = await webContainerRef.current.spawn("jsh", {
+        terminal: { cols: newTerminal.cols, rows: newTerminal.rows },
+      });
+
+      shellProcess.output.pipeTo(
+        new WritableStream({
+          write(data) {
+            newTerminal.write(data);
+          },
+        })
+      );
+
+      const inputWriter = shellProcess.input.getWriter();
+      inputWriterRef.current = inputWriter;
+
+      newTerminal.onData((data) => {
+        inputWriter.write(data);
+      });
 
       // Run ESLint first
       await runEslint(webContainerRef.current);

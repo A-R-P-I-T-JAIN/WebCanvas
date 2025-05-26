@@ -2,7 +2,6 @@ import React, { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
-import Enter from "./Enter";
 import Nav from "./Nav";
 import math from "../assets/math.mp4";
 import physics from "../assets/physics.mp4";
@@ -221,7 +220,7 @@ const Home = () => {
           <div className="hero-buttons flex flex-col sm:flex-row gap-6 justify-center items-center">
             <button 
               className="group relative px-10 py-5 bg-gradient-to-r from-teal-500 to-cyan-500 text-white rounded-2xl shadow-2xl hover:shadow-teal-500/25 transform hover:scale-105 transition-all duration-300 font-bold text-lg overflow-hidden"
-              onClick={() => navigate("/playground")}
+              onClick={() => navigate("/sketchtool")}
             >
               <div className="absolute inset-0 bg-gradient-to-r from-teal-400 to-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <span className="relative flex items-center gap-3">
@@ -229,16 +228,6 @@ const Home = () => {
                 Start Creating
               </span>
             </button>
-            
-            {/* <button 
-              className="group px-10 py-5 bg-white/5 backdrop-blur-md border border-white/20 text-white rounded-2xl shadow-xl hover:bg-white/10 transform hover:scale-105 transition-all duration-300 font-semibold text-lg"
-              onClick={() => navigate("/playground")}
-            >
-              <span className="flex items-center gap-3">
-                <MdAutoAwesome className="text-2xl text-purple-400" />
-                Try AI Magic
-              </span>
-            </button> */}
           </div>
         </div>
 

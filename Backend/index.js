@@ -90,28 +90,31 @@ app.post("/api/set-command", (req, res) => {
   }
 });
 
-app.post("/api/get-user-prompt", upload.single("image"), async (req, res) => {
+app.post("/api/get-user-prompt", upload.array("images", 10), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).send("No image file uploaded.");
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).send("No image files uploaded.");
     }
 
-    const imagePath = req.file.path;
-    const mimeType = req.file.mimetype;
     const userPrompt = req.body.userPrompt;
-  const userId = req.body.userId;
+    const userId = req.body.userId;
 
     console.log(userId, userPrompt);
+    console.log(`Processing ${req.files.length} image(s)`);
 
-    const imagePart = fileToGenerativePart(imagePath, mimeType);
+    // Process all uploaded images
+    const imageParts = req.files.map(file => {
+      console.log(`Processing image: ${file.originalname}, type: ${file.mimetype}`);
+      return fileToGenerativePart(file.path, file.mimetype);
+    });
 
-    // Generate dependencies and code
+    // Generate dependencies and code with all images
     const depGenerationPromptText = depGenerationPrompt();
-    // console.log("depGenerationPromptText ---> ",depGenerationPromptText);
-    const depGenerationPromptResult = await model.generateContent(
-      [depGenerationPromptText, imagePart]
-    );
-    // console.log("depGenerationPromptResult ---> ",depGenerationPromptResult.response.candidates[0].content);
+    const depGenerationPromptResult = await model.generateContent([
+      depGenerationPromptText,
+      ...imageParts
+    ]);
+    
     const currentDependenciesRaw = depGenerationPromptResult.response.text().replace("`", "").replaceAll("`$", "");
 
     console.log("currentDependenciesRaw ---> ", currentDependenciesRaw);
@@ -123,7 +126,11 @@ app.post("/api/get-user-prompt", upload.single("image"), async (req, res) => {
       currentDependencies,
     );
 
-    const generatedCode = await model.generateContent([codeGenerationPromptText, imagePart]);
+    // Generate code with all images
+    const generatedCode = await model.generateContent([
+      codeGenerationPromptText, 
+      ...imageParts
+    ]);
 
     const errorFreeGeneratePrompt = await codeErrorreductionPrompt(
       generatedCode.response.text()
@@ -146,19 +153,17 @@ app.post("/api/get-user-prompt", upload.single("image"), async (req, res) => {
     const cleanedCode = await lintCode(cleanedRawCode);
     console.log("2");
 
-
-    // console.log(cleanedCode);
-
+    // Store user data
     userData = {
       ...userData,
       [userId]: {
         code: cleanedCode,
         dependencies: currentDependencies,
+        imageCount: req.files.length, // Track number of images processed
       },
     };
 
-    // console.log("Saved UserData ---> ", userData);
-
+    // Find user data
     const acctualData = Object.entries(userData).find(([id, usersData]) => {
       if (id === userId) {
         return usersData;
@@ -169,12 +174,20 @@ app.post("/api/get-user-prompt", upload.single("image"), async (req, res) => {
       return res.status(404).json({ error: "User data not found" });
     }
 
-    // console.log("acctualData ---> ", acctualData[0]);
+    // Clean up uploaded files after processing (optional)
+    req.files.forEach(file => {
+      try {
+        // Uncomment the next line if you want to delete files after processing
+        // fs.unlinkSync(file.path);
+      } catch (cleanupError) {
+        console.error("Error cleaning up file:", file.path, cleanupError);
+      }
+    });
 
-    // console.log(req.session.currentCleanedCode);
     res.json({ 
       code: acctualData[1].code, 
-      dependencies: acctualData[1].dependencies 
+      dependencies: acctualData[1].dependencies,
+      processedImages: req.files.length
     });
   } catch (error) {
     console.error("Error in processing:", error);
@@ -236,53 +249,6 @@ const generationConfig = {
 };
 
 // Set up the /calculate route
-app.post("/calculate", upload.single("image"), async (req, res) => {
-  try {
-    // Check if an image was uploaded
-    if (!req.file) {
-      return res.status(400).send("No image file uploaded.");
-    }
-
-    // Get the path of the uploaded image
-    const imagePath = req.file.path;
-    const mimeType = req.file.mimetype;
-
-    // Convert the image to generative part for the API request
-    const imagePart = fileToGenerativePart(imagePath, mimeType);
-
-    // Define the prompt
-    const prompt = `You are given an image that may contain mathematical equations, graphical problems, physics-related questions, or other types of visual content. Your task is to identify the type of problem and provide only the final answer based on the following guidelines:
-
-Mathematical Equations: If the image contains a mathematical expression or equation, solve it using the PEMDAS rule (Parentheses, Exponents, Multiplication and Division, Addition and Subtraction). Provide only the final result.
-
-Physics Problems: If the image includes a physics-related question, compute the solution using the appropriate formulas or principles and provide only the final result.
-
-Graphical/Geometrical Problems: If the image represents a geometrical figure or graphical math problem, analyze the image and provide only the final result.
-
-Other Visual Content: If the image contains other types of content (e.g., word problems, abstract concepts, diagrams, etc.), interpret the image and provide only the final result.
-
-Please provide only the answer without any additional explanation or reasoning.`;
-
-    // Make the request to Google Gemini API
-    const result = await model.generateContent([prompt, imagePart]);
-
-    // Log the result
-    console.log(result.response.text());
-
-    // Send back the result to the client
-    res.send(result.response.text());
-  } catch (error) {
-    console.error("Error:", error);
-    res.status(500).send("Internal Server Error");
-  } finally {
-    // Clean up the uploaded file
-    fs.unlink(req.file.path, (err) => {
-      if (err) console.error("Failed to delete uploaded image:", err);
-    });
-  }
-});
-
-// Set up the /calculate route
 app.post("/generate", async (req, res) => {
   try {
     // Ensure the request contains the 'text' field
@@ -291,47 +257,784 @@ app.post("/generate", async (req, res) => {
     if (!text) {
       return res.status(400).send("Text field is required!");
     }
-    // Define the prompt based on the user's input
-    const prompt = `Generate an Excalidraw JSON representation for a drawing based on the following description: "${text}". Ensure that the output consists solely of Excalidraw elements, accurately reflecting the requested drawing with the appropriate shapes, colors, text, and other details.
-
-The JSON format should atleast include the following properties for each element:
-
-- **type**: The type of the element (e.g., "rectangle", "ellipse", "line", "text").
-- **id**: A unique identifier for the element.
-- **fillStyle**: The fill style of the element (e.g., "solid").
-- **strokeWidth**: The width of the stroke for lines and shapes.
-- **strokeColor**: The color of the stroke.
-- **backgroundColor**: The background color (only for shapes that have a background).
-- **width**: The width of the element (for shapes).
-- **height**: The height of the element (for shapes).
-- **x**: The x-coordinate of the element's position.
-- **y**: The y-coordinate of the element's position.
-- **angle**: The rotation angle of the element (default is 0).
-
-Here's the format to follow:
-
-[
-    {
-        "type": "{element_type}",
-        "id": "{unique_id}",
-        "fillStyle": "{fill_style}",
-        "strokeWidth": {stroke_width},
-        "strokeColor": "{stroke_color}",
-        "backgroundColor": "{background_color}",
-        "width": {element_width},
-        "height": {element_height},
-        "x": {position_x},
-        "y": {position_y},
-        "angle": {angle_value}
-    },
-    ...
-]
-    And make sure does not include type:"line" in your code, instead use rectangle to make a line.
-
-The output should reflect all specified details precisely without any additional comments or explanations. Make sure the JSON is correctly formatted and valid for use in Excalidraw.Try to use different colors for different elements, Use combination of colors not only shades of black and white.`;
 
     const parts = [
-      { text: `You are trained to generate Excalidraw JSON representations for drawings based on the following text descriptions. Each drawing should consist of multiple Excalidraw elements like rectangles, ellipses, text boxes, and lines. Use the appropriate properties (type, id, fillStyle, strokeWidth, strokeColor, backgroundColor, width, height, x, y, angle) to create the requested drawings.Below are some examples of Excalidraw JSON element codes for different shapes:\nExample 1: Rectangle\n{\n    \"type\": \"rectangle\",\n    \"id\": \"rect-1\",\n    \"fillStyle\": \"solid\",\n    \"strokeWidth\": 2,\n    \"strokeColor\": \"#000000\",\n    \"backgroundColor\": \"#ffcc00\",\n    \"width\": 100,\n    \"height\": 50,\n    \"x\": 100,\n    \"y\": 100,\n    \"angle\": 0\n}\nExample 2: Ellipse\n{\n    \"type\": \"ellipse\",\n    \"id\": \"ellipse-1\",\n    \"fillStyle\": \"solid\",\n    \"strokeWidth\": 2,\n    \"strokeColor\": \"#000000\",\n    \"backgroundColor\": \"#00ff00\",\n    \"width\": 100,\n    \"height\": 100,\n    \"x\": 200,\n    \"y\": 100,\n    \"angle\": 0\n}\nExample 3: Text\n{\n    \"type\": \"text\",\n    \"id\": \"text-1\",\n    \"fillStyle\": \"solid\",\n    \"strokeWidth\": 1,\n    \"strokeColor\": \"#000000\",\n    \"backgroundColor\": \"#ffffff\",\n    \"width\": 50,\n    \"height\": 30,\n    \"x\": 150,\n    \"y\": 200,\n    \"angle\": 0,\n    \"text\": \"Hello World\",\n    \"fontFamily\": \"Arial\",\n    \"fontSize\": 16\n}\nExample 4: Line (using a rectangle as a line)\n{\n    \"type\": \"rectangle\",\n    \"id\": \"line-1\",\n    \"fillStyle\": \"solid\",\n    \"strokeWidth\": 2,\n    \"strokeColor\": \"#000000\",\n    \"backgroundColor\": \"#000000\",\n    \"width\": 200,\n    \"height\": 2,\n    \"x\": 100,\n    \"y\": 300,\n    \"angle\": 0\n}\nsome complex examples:\nExample 1: A Red Car[\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"car-body\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#ff0000\",\n        \"width\": 200,\n        \"height\": 60,\n        \"x\": 100,\n        \"y\": 100,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"wheel-1\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#555555\",\n        \"width\": 40,\n        \"height\": 40,\n        \"x\": 120,\n        \"y\": 160,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"wheel-2\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#555555\",\n        \"width\": 40,\n        \"height\": 40,\n        \"x\": 240,\n        \"y\": 160,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"car-window\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#99ccff\",\n        \"width\": 60,\n        \"height\": 30,\n        \"x\": 140,\n        \"y\": 110,\n        \"angle\": 0\n    }\n]\nExample 2: A Laptop Placed on a Table[\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"laptop-screen\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#0000ff\",\n        \"width\": 120,\n        \"height\": 80,\n        \"x\": 150,\n        \"y\": 100,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"laptop-keyboard\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#cccccc\",\n        \"width\": 120,\n        \"height\": 20,\n        \"x\": 150,\n        \"y\": 180,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"table-top\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#8B4513\",\n        \"backgroundColor\": \"#DEB887\",\n        \"width\": 300,\n        \"height\": 20,\n        \"x\": 100,\n        \"y\": 220,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"table-leg-1\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#8B4513\",\n        \"backgroundColor\": \"#8B4513\",\n        \"width\": 20,\n        \"height\": 100,\n        \"x\": 100,\n        \"y\": 240,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"table-leg-2\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#8B4513\",\n        \"backgroundColor\": \"#8B4513\",\n        \"width\": 20,\n        \"height\": 100,\n        \"x\": 380,\n        \"y\": 240,\n        \"angle\": 0\n    }\n]\nExample 3: A Tree[\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"tree-trunk\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#8B4513\",\n        \"width\": 40,\n        \"height\": 100,\n        \"x\": 200,\n        \"y\": 200,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"tree-leaves-1\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#00cc00\",\n        \"width\": 100,\n        \"height\": 80,\n        \"x\": 170,\n        \"y\": 120,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"tree-leaves-2\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#00cc00\",\n        \"width\": 80,\n        \"height\": 60,\n        \"x\": 190,\n        \"y\": 80,\n        \"angle\": 0\n    }\n]\nExample 4: A House[\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"house-body\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#ffcc00\",\n        \"width\": 150,\n        \"height\": 100,\n        \"x\": 100,\n        \"y\": 200,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"door\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#8B4513\",\n        \"width\": 40,\n        \"height\": 60,\n        \"x\": 140,\n        \"y\": 240,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"window-1\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#99ccff\",\n        \"width\": 40,\n        \"height\": 40,\n        \"x\": 110,\n        \"y\": 210,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"window-2\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#99ccff\",\n        \"width\": 40,\n        \"height\": 40,\n        \"x\": 180,\n        \"y\": 210,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"roof\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#ff0000\",\n        \"width\": 160,\n        \"height\": 60,\n        \"x\": 95,\n        \"y\": 140,\n        \"angle\": -0.3\n    }\n]\nExample 5: A Sun[\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"sun\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#FFD700\",\n        \"backgroundColor\": \"#FFD700\",\n        \"width\": 100,\n        \"height\": 100,\n        \"x\": 100,\n        \"y\": 50,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"sun-ray-1\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#FFD700\",\n        \"backgroundColor\": \"#FFD700\",\n        \"width\": 80,\n        \"height\": 2,\n        \"x\": 140,\n        \"y\": 0,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"sun-ray-2\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#FFD700\",\n        \"backgroundColor\": \"#FFD700\",\n        \"width\": 80,\n        \"height\": 2,\n        \"x\": 140,\n        \"y\": 140,\n        \"angle\": 0\n    }\n]\nSure! Below are 8 examples of complex Excalidraw JSON code for various objects. These examples demonstrate how you can combine basic shapes like rectangles, ellipses, and lines to represent more intricate objects such as a car, laptop, table, and tree.Example 1: A Red Carjson[\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"car-body\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#ff0000\",\n        \"width\": 200,\n        \"height\": 60,\n        \"x\": 100,\n        \"y\": 100,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"wheel-1\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#555555\",\n        \"width\": 40,\n        \"height\": 40,\n        \"x\": 120,\n        \"y\": 160,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"wheel-2\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#555555\",\n        \"width\": 40,\n        \"height\": 40,\n        \"x\": 240,\n        \"y\": 160,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"car-window\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#99ccff\",\n        \"width\": 60,\n        \"height\": 30,\n        \"x\": 140,\n        \"y\": 110,\n        \"angle\": 0\n    }\n]\nExample 2: A Laptop Placed on a Tablejson[\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"laptop-screen\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#0000ff\",\n        \"width\": 120,\n        \"height\": 80,\n        \"x\": 150,\n        \"y\": 100,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"laptop-keyboard\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#cccccc\",\n        \"width\": 120,\n        \"height\": 20,\n        \"x\": 150,\n        \"y\": 180,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"table-top\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#8B4513\",\n        \"backgroundColor\": \"#DEB887\",\n        \"width\": 300,\n        \"height\": 20,\n        \"x\": 100,\n        \"y\": 220,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"table-leg-1\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#8B4513\",\n        \"backgroundColor\": \"#8B4513\",\n        \"width\": 20,\n        \"height\": 100,\n        \"x\": 100,\n        \"y\": 240,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"table-leg-2\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#8B4513\",\n        \"backgroundColor\": \"#8B4513\",\n        \"width\": 20,\n        \"height\": 100,\n        \"x\": 380,\n        \"y\": 240,\n        \"angle\": 0\n    }\n]\nExample 3: A Treejson[\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"tree-trunk\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#8B4513\",\n        \"width\": 40,\n        \"height\": 100,\n        \"x\": 200,\n        \"y\": 200,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"tree-leaves-1\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#00cc00\",\n        \"width\": 100,\n        \"height\": 80,\n        \"x\": 170,\n        \"y\": 120,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"tree-leaves-2\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#00cc00\",\n        \"width\": 80,\n        \"height\": 60,\n        \"x\": 190,\n        \"y\": 80,\n        \"angle\": 0\n    }\n]\nExample 4: A Housejson[\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"house-body\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#ffcc00\",\n        \"width\": 150,\n        \"height\": 100,\n        \"x\": 100,\n        \"y\": 200,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"door\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#8B4513\",\n        \"width\": 40,\n        \"height\": 60,\n        \"x\": 140,\n        \"y\": 240,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"window-1\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#99ccff\",\n        \"width\": 40,\n        \"height\": 40,\n        \"x\": 110,\n        \"y\": 210,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"window-2\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#99ccff\",\n        \"width\": 40,\n        \"height\": 40,\n        \"x\": 180,\n        \"y\": 210,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"roof\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#ff0000\",\n        \"width\": 160,\n        \"height\": 60,\n        \"x\": 95,\n        \"y\": 140,\n        \"angle\": -0.3\n    }\n]\nExample 5: A Sunjson[\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"sun\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#FFD700\",\n        \"backgroundColor\": \"#FFD700\",\n        \"width\": 100,\n        \"height\": 100,\n        \"x\": 100,\n        \"y\": 50,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"sun-ray-1\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#FFD700\",\n        \"backgroundColor\": \"#FFD700\",\n        \"width\": 80,\n        \"height\": 2,\n        \"x\": 140,\n        \"y\": 0,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"sun-ray-2\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#FFD700\",\n        \"backgroundColor\": \"#FFD700\",\n        \"width\": 80,\n        \"height\": 2,\n        \"x\": 140,\n        \"y\": 140,\n        \"angle\": 0\n    }\n]\nExample 6: A Cloud[\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"cloud-1\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#808080\",\n        \"backgroundColor\": \"#FFFFFF\",\n        \"width\": 80,\n        \"height\": 50,\n        \"x\": 150,\n        \"y\": 50,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"cloud-2\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#808080\",\n        \"backgroundColor\": \"#FFFFFF\",\n        \"width\": 70,\n        \"height\": 40,\n        \"x\": 180,\n        \"y\": 40,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"cloud-3\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#808080\",\n        \"backgroundColor\": \"#FFFFFF\",\n        \"width\": 60,\n        \"height\": 30,\n        \"x\": 170,\n        \"y\": 60,\n        \"angle\": 0\n    }\n]\nExample 7: A Car Wheel with Spokes\n[\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"wheel\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#000000\",\n        \"backgroundColor\": \"#555555\",\n        \"width\": 60,\n        \"height\": 60,\n        \"x\": 200,\n        \"y\": 200,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"spoke-1\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 1,\n        \"strokeColor\": \"#ffffff\",\n        \"backgroundColor\": \"#ffffff\",\n        \"width\": 50,\n        \"height\": 2,\n        \"x\": 210,\n        \"y\": 230,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"spoke-2\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 1,\n        \"strokeColor\": \"#ffffff\",\n        \"backgroundColor\": \"#ffffff\",\n        \"width\": 50,\n        \"height\": 2,\n        \"x\": 210,\n        \"y\": 230,\n        \"angle\": 1.57\n    }\n]\nExample 8: A Tree with Fruit[\n    {\n        \"type\": \"rectangle\",\n        \"id\": \"tree-trunk\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#8B4513\",\n        \"backgroundColor\": \"#8B4513\",\n        \"width\": 40,\n        \"height\": 100,\n        \"x\": 200,\n        \"y\": 200,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"tree-leaves\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#00cc00\",\n        \"backgroundColor\": \"#00cc00\",\n        \"width\": 120,\n        \"height\": 100,\n        \"x\": 170,\n        \"y\": 120,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"fruit-1\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#ff0000\",\n        \"backgroundColor\": \"#ff0000\",\n        \"width\": 20,\n        \"height\": 20,\n        \"x\": 190,\n        \"y\": 150,\n        \"angle\": 0\n    },\n    {\n        \"type\": \"ellipse\",\n        \"id\": \"fruit-2\",\n        \"fillStyle\": \"solid\",\n        \"strokeWidth\": 2,\n        \"strokeColor\": \"#ff0000\",\n        \"backgroundColor\": \"#ff0000\",\n        \"width\": 20,\n        \"height\": 20,\n        \"x\": 230,\n        \"y\": 170,\n        \"angle\": 0\n    }\n]\n\nNow, based on the given text description, generate the corresponding Excalidraw JSON code.Task:Generate an Excalidraw JSON representation for a drawing based on the following description:\"{description}\"The drawing should include various shapes, text elements, and lines based on the description, following the Excalidraw element examples shown above. Ensure that the JSON is properly formatted and contains the appropriate attributes such as type, id, fillStyle, strokeWidth, strokeColor, backgroundColor, width, height, x, y, and angle.Ensure the JSON includes the following properties for each element:type: The type of the element (e.g., \"rectangle\", \"ellipse\", \"text\").id: A unique identifier for the element.fillStyle: The fill style of the element (e.g., \"solid\").strokeWidth: The width of the stroke for lines and shapes.strokeColor: The color of the stroke.backgroundColor: The background color (for shapes with a background).width: The width of the element (for shapes).height: The height of the element (for shapes).x: The x-coordinate of the element's position.y: The y-coordinate of the element's position.angle: The rotation angle of the element (default is 0).text: The content of the text element (only for type: \"text\").fontFamily: The font family (only for type: \"text\").fontSize: The font size (only for type: \"text\").Important Notes:Do not use the type \"line\" directly. Instead, use a narrow rectangle to simulate a line.Use different colors for different elements. Avoid using only black and white shades; try using a variety of colors.The generated JSON should be valid and ready to use in Excalidraw without further modification.And make sure does not include type:"line" in your code, instead use rectangle to make a line.The output should reflect all specified details precisely without any additional comments or explanations. Make sure the JSON is correctly formatted and valid for use in Excalidraw.Try to use different colors for different elements, Use combination of colors not only shades of black and white.And does not include type:"star"` },
+      { text: `You are trained to generate Excalidraw JSON representations for website UI components and layouts based on text descriptions. Each UI component should consist of multiple Excalidraw elements like rectangles, ellipses, text boxes, and lines. Use the appropriate properties (type, id, fillStyle, strokeWidth, strokeColor, backgroundColor, width, height, x, y, angle) to create modern, responsive website UI elements.
+    
+    Below are some examples of Excalidraw JSON element codes for different shapes:
+    
+    Example 1: Rectangle
+    {
+        "type": "rectangle",
+        "id": "rect-1",
+        "fillStyle": "solid",
+        "strokeWidth": 2,
+        "strokeColor": "#000000",
+        "backgroundColor": "#ffcc00",
+        "width": 100,
+        "height": 50,
+        "x": 100,
+        "y": 100,
+        "angle": 0
+    }
+    
+    Example 2: Ellipse
+    {
+        "type": "ellipse",
+        "id": "ellipse-1",
+        "fillStyle": "solid",
+        "strokeWidth": 2,
+        "strokeColor": "#000000",
+        "backgroundColor": "#00ff00",
+        "width": 100,
+        "height": 100,
+        "x": 200,
+        "y": 100,
+        "angle": 0
+    }
+    
+    Example 3: Text
+    {
+        "type": "text",
+        "id": "text-1",
+        "fillStyle": "solid",
+        "strokeWidth": 1,
+        "strokeColor": "#000000",
+        "backgroundColor": "#ffffff",
+        "width": 50,
+        "height": 30,
+        "x": 150,
+        "y": 200,
+        "angle": 0,
+        "text": "Hello World",
+        "fontFamily": "Arial",
+        "fontSize": 16
+    }
+    
+    Example 4: Line (using a rectangle as a line)
+    {
+        "type": "rectangle",
+        "id": "line-1",
+        "fillStyle": "solid",
+        "strokeWidth": 2,
+        "strokeColor": "#000000",
+        "backgroundColor": "#000000",
+        "width": 200,
+        "height": 2,
+        "x": 100,
+        "y": 300,
+        "angle": 0
+    }
+    
+    UI Component Examples:
+    
+    Example 1: Website Header with Navigation
+    [
+        {
+            "type": "rectangle",
+            "id": "header-bg",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "#2563eb",
+            "width": 800,
+            "height": 80,
+            "x": 0,
+            "y": 0,
+            "angle": 0
+        },
+        {
+            "type": "text",
+            "id": "logo",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "transparent",
+            "width": 100,
+            "height": 30,
+            "x": 20,
+            "y": 25,
+            "angle": 0,
+            "text": "LOGO",
+            "fontFamily": "Arial",
+            "fontSize": 24
+        },
+        {
+            "type": "text",
+            "id": "nav-home",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "transparent",
+            "width": 50,
+            "height": 20,
+            "x": 400,
+            "y": 30,
+            "angle": 0,
+            "text": "Home",
+            "fontFamily": "Arial",
+            "fontSize": 16
+        },
+        {
+            "type": "text",
+            "id": "nav-about",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "transparent",
+            "width": 50,
+            "height": 20,
+            "x": 470,
+            "y": 30,
+            "angle": 0,
+            "text": "About",
+            "fontFamily": "Arial",
+            "fontSize": 16
+        },
+        {
+            "type": "text",
+            "id": "nav-services",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "transparent",
+            "width": 60,
+            "height": 20,
+            "x": 540,
+            "y": 30,
+            "angle": 0,
+            "text": "Services",
+            "fontFamily": "Arial",
+            "fontSize": 16
+        },
+        {
+            "type": "text",
+            "id": "nav-contact",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "transparent",
+            "width": 60,
+            "height": 20,
+            "x": 620,
+            "y": 30,
+            "angle": 0,
+            "text": "Contact",
+            "fontFamily": "Arial",
+            "fontSize": 16
+        },
+        {
+            "type": "rectangle",
+            "id": "cta-button",
+            "fillStyle": "solid",
+            "strokeWidth": 2,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "#10b981",
+            "width": 80,
+            "height": 40,
+            "x": 700,
+            "y": 20,
+            "angle": 0
+        },
+        {
+            "type": "text",
+            "id": "cta-text",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "transparent",
+            "width": 60,
+            "height": 20,
+            "x": 710,
+            "y": 30,
+            "angle": 0,
+            "text": "Get Started",
+            "fontFamily": "Arial",
+            "fontSize": 14
+        }
+    ]
+    
+    Example 2: Footer Section
+    [
+        {
+            "type": "rectangle",
+            "id": "footer-bg",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#000000",
+            "backgroundColor": "#1f2937",
+            "width": 800,
+            "height": 200,
+            "x": 0,
+            "y": 400,
+            "angle": 0
+        },
+        {
+            "type": "text",
+            "id": "footer-title",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "transparent",
+            "width": 100,
+            "height": 30,
+            "x": 50,
+            "y": 420,
+            "angle": 0,
+            "text": "Company Name",
+            "fontFamily": "Arial",
+            "fontSize": 20
+        },
+        {
+            "type": "text",
+            "id": "footer-description",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#9ca3af",
+            "backgroundColor": "transparent",
+            "width": 250,
+            "height": 40,
+            "x": 50,
+            "y": 450,
+            "angle": 0,
+            "text": "Building amazing digital experiences for modern businesses.",
+            "fontFamily": "Arial",
+            "fontSize": 14
+        },
+        {
+            "type": "text",
+            "id": "footer-links-title",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "transparent",
+            "width": 80,
+            "height": 20,
+            "x": 350,
+            "y": 420,
+            "angle": 0,
+            "text": "Quick Links",
+            "fontFamily": "Arial",
+            "fontSize": 16
+        },
+        {
+            "type": "text",
+            "id": "footer-link-1",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#9ca3af",
+            "backgroundColor": "transparent",
+            "width": 60,
+            "height": 20,
+            "x": 350,
+            "y": 450,
+            "angle": 0,
+            "text": "About Us",
+            "fontFamily": "Arial",
+            "fontSize": 14
+        },
+        {
+            "type": "text",
+            "id": "footer-link-2",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#9ca3af",
+            "backgroundColor": "transparent",
+            "width": 60,
+            "height": 20,
+            "x": 350,
+            "y": 475,
+            "angle": 0,
+            "text": "Privacy Policy",
+            "fontFamily": "Arial",
+            "fontSize": 14
+        },
+        {
+            "type": "text",
+            "id": "contact-title",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "transparent",
+            "width": 80,
+            "height": 20,
+            "x": 550,
+            "y": 420,
+            "angle": 0,
+            "text": "Contact Info",
+            "fontFamily": "Arial",
+            "fontSize": 16
+        },
+        {
+            "type": "text",
+            "id": "contact-email",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#9ca3af",
+            "backgroundColor": "transparent",
+            "width": 150,
+            "height": 20,
+            "x": 550,
+            "y": 450,
+            "angle": 0,
+            "text": "info@company.com",
+            "fontFamily": "Arial",
+            "fontSize": 14
+        },
+        {
+            "type": "rectangle",
+            "id": "footer-divider",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#374151",
+            "backgroundColor": "#374151",
+            "width": 700,
+            "height": 1,
+            "x": 50,
+            "y": 520,
+            "angle": 0
+        },
+        {
+            "type": "text",
+            "id": "copyright",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#6b7280",
+            "backgroundColor": "transparent",
+            "width": 300,
+            "height": 20,
+            "x": 50,
+            "y": 540,
+            "angle": 0,
+            "text": "© 2024 Company Name. All rights reserved.",
+            "fontFamily": "Arial",
+            "fontSize": 12
+        }
+    ]
+    
+    Example 3: Hero Section
+    [
+        {
+            "type": "rectangle",
+            "id": "hero-bg",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "#f3f4f6",
+            "width": 800,
+            "height": 400,
+            "x": 0,
+            "y": 80,
+            "angle": 0
+        },
+        {
+            "type": "text",
+            "id": "hero-title",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#1f2937",
+            "backgroundColor": "transparent",
+            "width": 400,
+            "height": 60,
+            "x": 200,
+            "y": 180,
+            "angle": 0,
+            "text": "Welcome to Our Amazing Platform",
+            "fontFamily": "Arial",
+            "fontSize": 32
+        },
+        {
+            "type": "text",
+            "id": "hero-subtitle",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#6b7280",
+            "backgroundColor": "transparent",
+            "width": 500,
+            "height": 40,
+            "x": 150,
+            "y": 250,
+            "angle": 0,
+            "text": "Discover innovative solutions that transform your business",
+            "fontFamily": "Arial",
+            "fontSize": 18
+        },
+        {
+            "type": "rectangle",
+            "id": "hero-cta-primary",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#2563eb",
+            "backgroundColor": "#2563eb",
+            "width": 120,
+            "height": 50,
+            "x": 280,
+            "y": 320,
+            "angle": 0
+        },
+        {
+            "type": "text",
+            "id": "hero-cta-primary-text",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "transparent",
+            "width": 80,
+            "height": 20,
+            "x": 300,
+            "y": 335,
+            "angle": 0,
+            "text": "Get Started",
+            "fontFamily": "Arial",
+            "fontSize": 16
+        },
+        {
+            "type": "rectangle",
+            "id": "hero-cta-secondary",
+            "fillStyle": "solid",
+            "strokeWidth": 2,
+            "strokeColor": "#6b7280",
+            "backgroundColor": "transparent",
+            "width": 120,
+            "height": 50,
+            "x": 420,
+            "y": 320,
+            "angle": 0
+        },
+        {
+            "type": "text",
+            "id": "hero-cta-secondary-text",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#6b7280",
+            "backgroundColor": "transparent",
+            "width": 80,
+            "height": 20,
+            "x": 440,
+            "y": 335,
+            "angle": 0,
+            "text": "Learn More",
+            "fontFamily": "Arial",
+            "fontSize": 16
+        }
+    ]
+    
+    Example 4: Card Component
+    [
+        {
+            "type": "rectangle",
+            "id": "card-bg",
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeColor": "#e5e7eb",
+            "backgroundColor": "#ffffff",
+            "width": 300,
+            "height": 200,
+            "x": 50,
+            "y": 100,
+            "angle": 0
+        },
+        {
+            "type": "rectangle",
+            "id": "card-image",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#d1d5db",
+            "backgroundColor": "#d1d5db",
+            "width": 280,
+            "height": 120,
+            "x": 60,
+            "y": 110,
+            "angle": 0
+        },
+        {
+            "type": "text",
+            "id": "card-title",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#1f2937",
+            "backgroundColor": "transparent",
+            "width": 250,
+            "height": 25,
+            "x": 70,
+            "y": 240,
+            "angle": 0,
+            "text": "Card Title",
+            "fontFamily": "Arial",
+            "fontSize": 18
+        },
+        {
+            "type": "text",
+            "id": "card-description",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#6b7280",
+            "backgroundColor": "transparent",
+            "width": 250,
+            "height": 20,
+            "x": 70,
+            "y": 265,
+            "angle": 0,
+            "text": "Brief description of the card content",
+            "fontFamily": "Arial",
+            "fontSize": 14
+        }
+    ]
+    
+    Example 5: Form Component
+    [
+        {
+            "type": "rectangle",
+            "id": "form-bg",
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeColor": "#e5e7eb",
+            "backgroundColor": "#ffffff",
+            "width": 400,
+            "height": 300,
+            "x": 200,
+            "y": 100,
+            "angle": 0
+        },
+        {
+            "type": "text",
+            "id": "form-title",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#1f2937",
+            "backgroundColor": "transparent",
+            "width": 200,
+            "height": 30,
+            "x": 300,
+            "y": 120,
+            "angle": 0,
+            "text": "Contact Form",
+            "fontFamily": "Arial",
+            "fontSize": 24
+        },
+        {
+            "type": "rectangle",
+            "id": "input-name",
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeColor": "#d1d5db",
+            "backgroundColor": "#f9fafb",
+            "width": 320,
+            "height": 40,
+            "x": 240,
+            "y": 160,
+            "angle": 0
+        },
+        {
+            "type": "text",
+            "id": "input-name-placeholder",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#9ca3af",
+            "backgroundColor": "transparent",
+            "width": 100,
+            "height": 20,
+            "x": 250,
+            "y": 170,
+            "angle": 0,
+            "text": "Your Name",
+            "fontFamily": "Arial",
+            "fontSize": 16
+        },
+        {
+            "type": "rectangle",
+            "id": "input-email",
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeColor": "#d1d5db",
+            "backgroundColor": "#f9fafb",
+            "width": 320,
+            "height": 40,
+            "x": 240,
+            "y": 220,
+            "angle": 0
+        },
+        {
+            "type": "text",
+            "id": "input-email-placeholder",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#9ca3af",
+            "backgroundColor": "transparent",
+            "width": 100,
+            "height": 20,
+            "x": 250,
+            "y": 230,
+            "angle": 0,
+            "text": "Your Email",
+            "fontFamily": "Arial",
+            "fontSize": 16
+        },
+        {
+            "type": "rectangle",
+            "id": "submit-button",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#2563eb",
+            "backgroundColor": "#2563eb",
+            "width": 100,
+            "height": 40,
+            "x": 350,
+            "y": 280,
+            "angle": 0
+        },
+        {
+            "type": "text",
+            "id": "submit-text",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "transparent",
+            "width": 60,
+            "height": 20,
+            "x": 370,
+            "y": 290,
+            "angle": 0,
+            "text": "Submit",
+            "fontFamily": "Arial",
+            "fontSize": 16
+        }
+    ]
+    
+    Example 6: Sidebar Navigation
+    [
+        {
+            "type": "rectangle",
+            "id": "sidebar-bg",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#374151",
+            "backgroundColor": "#374151",
+            "width": 250,
+            "height": 600,
+            "x": 0,
+            "y": 0,
+            "angle": 0
+        },
+        {
+            "type": "text",
+            "id": "sidebar-logo",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "transparent",
+            "width": 100,
+            "height": 30,
+            "x": 20,
+            "y": 30,
+            "angle": 0,
+            "text": "Dashboard",
+            "fontFamily": "Arial",
+            "fontSize": 20
+        },
+        {
+            "type": "rectangle",
+            "id": "nav-item-1",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#2563eb",
+            "backgroundColor": "#2563eb",
+            "width": 210,
+            "height": 40,
+            "x": 20,
+            "y": 100,
+            "angle": 0
+        },
+        {
+            "type": "text",
+            "id": "nav-text-1",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#ffffff",
+            "backgroundColor": "transparent",
+            "width": 80,
+            "height": 20,
+            "x": 35,
+            "y": 110,
+            "angle": 0,
+            "text": "Home",
+            "fontFamily": "Arial",
+            "fontSize": 16
+        },
+        {
+            "type": "text",
+            "id": "nav-text-2",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#d1d5db",
+            "backgroundColor": "transparent",
+            "width": 80,
+            "height": 20,
+            "x": 35,
+            "y": 160,
+            "angle": 0,
+            "text": "Analytics",
+            "fontFamily": "Arial",
+            "fontSize": 16
+        },
+        {
+            "type": "text",
+            "id": "nav-text-3",
+            "fillStyle": "solid",
+            "strokeWidth": 0,
+            "strokeColor": "#d1d5db",
+            "backgroundColor": "transparent",
+            "width": 80,
+            "height": 20,
+            "x": 35,
+            "y": 200,
+            "angle": 0,
+            "text": "Settings",
+            "fontFamily": "Arial",
+            "fontSize": 16
+        }
+    ]
+    
+    Now, based on the given text description, generate the corresponding Excalidraw JSON code for website UI components.
+    
+    Task: Generate an Excalidraw JSON representation for a UI component based on the following description:
+    "{description}"
+    
+    The UI component should include various shapes, text elements, and layouts based on the description, following the Excalidraw element examples shown above. Ensure that the JSON is properly formatted and contains the appropriate attributes such as type, id, fillStyle, strokeWidth, strokeColor, backgroundColor, width, height, x, y, and angle.
+    
+    UI Design Guidelines:
+    - Use modern color schemes (blues, grays, greens for primary actions)
+    - Implement proper spacing and alignment
+    - Create clear visual hierarchy with typography
+    - Use appropriate contrast ratios for accessibility
+    - Include interactive elements like buttons and form fields
+    - Follow common UI patterns and conventions
+    
+    Ensure the JSON includes the following properties for each element:
+    - type: The type of the element (e.g., "rectangle", "ellipse", "text")
+    - id: A unique identifier for the element
+    - fillStyle: The fill style of the element (e.g., "solid")
+    - strokeWidth: The width of the stroke for lines and shapes
+    - strokeColor: The color of the stroke
+    - backgroundColor: The background color (use "transparent" for text overlays)
+    - width: The width of the element
+    - height: The height of the element
+    - x: The x-coordinate of the element's position
+    - y: The y-coordinate of the element's position
+    - angle: The rotation angle of the element (default is 0)
+    - text: The content of the text element (only for type: "text")
+    - fontFamily: The font family (only for type: "text")
+    - fontSize: The font size (only for type: "text")
+    
+    Important Notes:
+    - Do not use the type "line" directly. Instead, use a narrow rectangle to simulate a line
+    - Use modern web colors and design patterns
+    - Create responsive-looking layouts that follow current UI/UX best practices
+    - The generated JSON should be valid and ready to use in Excalidraw without further modification
+    - Use a variety of colors appropriate for web interfaces, not just black and white
+    - Does not include type:"star" in your code
+    
+    The output should reflect all specified details precisely without any additional comments or explanations. Make sure the JSON is correctly formatted and valid for use in Excalidraw.` },
       { text: `input: ${text}` },
       { text: "output: " },
     ];
