@@ -2,11 +2,13 @@ import React, { useState, useRef, useEffect } from "react";
 import { Terminal } from "xterm";
 import { WebContainer } from "@webcontainer/api";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 import "xterm/css/xterm.css";
 import "../App.css";
 import ExecutionPage from "./ExecutionPage";
 
 function WebsiteGenerator() {
+  const navigate = useNavigate();
   const [source, setSource] = useState(""); // State to hold the server URL
   const terminalRef = useRef(null); // Reference to the terminal container in the DOM
   const webContainerRef = useRef(null); // Reference to the WebContainer instance
@@ -50,6 +52,30 @@ function WebsiteGenerator() {
       window.location.reload();
     }
   }, []);
+
+  useEffect(() => {
+    if (!code || !webContainerRef.current) return;
+  
+    const watchForChanges = async () => {
+      try {
+        // Set up a simple polling mechanism to check for code changes
+        const checkInterval = setInterval(async () => {
+          const currentCode = localStorage.getItem("code");
+          if (currentCode && currentCode !== JSON.stringify(code)) {
+            console.log("Code changes detected, triggering rebuild...");
+            await handleReRun();
+          }
+        }, 5000); // Check every 5 seconds
+  
+        return () => clearInterval(checkInterval);
+      } catch (error) {
+        console.error("Error setting up file watcher:", error);
+      }
+    };
+  
+    const cleanup = watchForChanges();
+    return cleanup;
+  }, [code]);
 
   const indexHtml = {
     "index.html": {
@@ -204,10 +230,10 @@ export default defineConfig({
         "build",
         "--emptyOutDir",
       ]);
-
+  
       let rawOutput = "";
       let errorLog = "";
-
+  
       process.output.pipeTo(
         new WritableStream({
           write: (data) => {
@@ -219,12 +245,15 @@ export default defineConfig({
           },
         })
       );
-
+  
       await process.exit;
-
+  
       if (rawOutput.includes("error") || rawOutput.includes("failed")) {
         errorLog = rawOutput;
         console.error("Vite Build Errors:\n", errorLog);
+        
+        // Automatically trigger error correction
+        setErrors("Build failed - attempting auto-correction...");
         await fetchCodeForErrorCorrection(errorLog);
         throw new Error("Build failed");
       }
@@ -242,10 +271,10 @@ export default defineConfig({
         "json",
         "src/",
       ]);
-
+  
       let rawOutput = "";
       let errorLog = "";
-
+  
       process.output.pipeTo(
         new WritableStream({
           write: (data) => {
@@ -257,9 +286,9 @@ export default defineConfig({
           },
         })
       );
-
+  
       await process.exit;
-
+  
       if (rawOutput.trim()) {
         try {
           const eslintErrors = JSON.parse(rawOutput);
@@ -270,9 +299,12 @@ export default defineConfig({
               }
             });
           });
-
+  
           if (errorLog) {
             console.log("ESLint Errors:\n", errorLog);
+            
+            // Automatically trigger error correction
+            setErrors("ESLint errors found - attempting auto-correction...");
             await fetchCodeForErrorCorrection(errorLog);
           }
         } catch (parseError) {
@@ -357,14 +389,16 @@ export default defineConfig({
     try {
       const codeResponse = localStorage.getItem("code");
       const dependencies = localStorage.getItem("dependencies");
-
-      let errorFreeCode;
-
-      console.log("code is getting error free");
-
+  
+      if (!codeResponse) {
+        console.log("No code found in localStorage");
+        return;
+      }
+  
+      console.log("Getting error-free code...");
+  
       if (errorCode) {
-        errorFreeCode = await axios.post(
-          // "https://weblyss.onrender.com/api/errorcorrection",
+        const errorFreeCode = await axios.post(
           "http://localhost:3000/api/errorcorrection",
           {
             code: codeResponse,
@@ -372,56 +406,50 @@ export default defineConfig({
             dependencies: dependencies,
           }
         );
-
-        console.log("might be error free code is generated");
-
+  
         const data = errorFreeCode?.data?.cleancode;
-
-        console.log(data);
-
+  
         if (data) {
-          const parseData = data;
-          // console.log( parseData);
-
-          if (!parseData) {
-            console.log("No data received in fetchCodeForErrorCorrection");
-            return;
-          }
-
-          console.log("error free code setting up in localStorage");
-
-          localStorage.setItem("code", parseData);
-
-          const fixedCode = localStorage.getItem("code");
-
+          console.log("Setting error-free code in localStorage");
+          localStorage.setItem("code", JSON.stringify(data));
+  
+          // Parse the corrected code
+          const parsedFixedCode = JSON.parse(JSON.stringify(data));
+          
           const mergedCode = {
             ...indexHtml,
-            ...fixedCode,
-            src: fixedCode.src || codeResponse,
+            ...parsedFixedCode,
+            src: parsedFixedCode.src || JSON.parse(codeResponse).src,
           };
-
+  
+          // Update the state and remount
+          setCode(mergedCode);
           await webContainerRef.current.mount(mergedCode);
-          runEslint(webContainerRef.current);
-          runViteBuild(webContainerRef.current);
-
-        }
-
-        const lastReload = localStorage.getItem("lastReload");
-        const currentTime = Date.now();
-
-        if (!lastReload) {
-          localStorage.setItem("lastReload", currentTime);
-        } else if (currentTime - lastReload > 5000) {
-          // 5 seconds threshold
-          localStorage.setItem("lastReload", currentTime);
-          window.location.reload();
+          
+          // Restart the server after mounting new code
+          if (inputWriterRef.current) {
+            const inputWriter = inputWriterRef.current;
+            inputWriter.write('\x03'); // Stop current process
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            inputWriter.write('npx vite\n'); // Restart server
+          }
+          
+          // Run checks
+          await Promise.all([
+            runEslint(webContainerRef.current),
+            runViteBuild(webContainerRef.current)
+          ]);
         }
       }
     } catch (error) {
-      console.log("error in fetchCodeForErrorCorrection:", error.message);
-      fetchCodeForErrorCorrection(errorCode);
+      console.log("Error in fetchCodeForErrorCorrection:", error.message);
+      // Retry once more if it fails
+      if (errorCode) {
+        setTimeout(() => fetchCodeForErrorCorrection(errorCode), 3000);
+      }
     }
   };
+  
 
   // Fetch code on initial render
   useEffect(() => {
@@ -615,49 +643,44 @@ export default defineConfig({
 
   // Function to handle manual re-run
   const handleReRun = async () => {
-    if (!webContainerRef.current) return;
+    if (!webContainerRef.current || !inputWriterRef.current) return;
     
     setIsBuilding(true);
     setErrors("");
     
     try {
-      // Create new terminal instance
-      const newTerminal = new Terminal({ convertEol: true, cursorBlink: true });
-      newTerminal.open(terminalRef.current);
-      newTerminal.writeln("Rebuilding project...");
-      setTerminal(newTerminal);
-
-      // Get the shell process
-      const shellProcess = await webContainerRef.current.spawn("jsh", {
-        terminal: { cols: newTerminal.cols, rows: newTerminal.rows },
-      });
-
-      shellProcess.output.pipeTo(
-        new WritableStream({
-          write(data) {
-            newTerminal.write(data);
-          },
-        })
-      );
-
-      const inputWriter = shellProcess.input.getWriter();
-      inputWriterRef.current = inputWriter;
-
-      newTerminal.onData((data) => {
-        inputWriter.write(data);
-      });
-
-      // Run ESLint first
-      await runEslint(webContainerRef.current);
-      
-      // Then run Vite build
-      await runViteBuild(webContainerRef.current);
+      const terminal = terminalRef.current;
+      if (terminal) {
+        terminal.clear();
+        terminal.writeln("Rebuilding project...");
+        
+        // Use existing input writer instead of creating new shell process
+        const inputWriter = inputWriterRef.current;
+        
+        // Stop current dev server
+        inputWriter.write('\x03'); // Ctrl+C to stop current process
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Restart the development server
+        inputWriter.write('npx vite\n');
+        
+        // Run ESLint and Vite build in parallel
+        await Promise.all([
+          runEslint(webContainerRef.current),
+          runViteBuild(webContainerRef.current)
+        ]);
+        
+        terminal.writeln("Project rebuilt successfully!");
+      }
       
       setIsBuilding(false);
     } catch (error) {
       console.error("Error during rebuild:", error);
       setErrors("Failed to rebuild project. Please check the terminal for errors.");
       setIsBuilding(false);
+      
+      // Trigger automatic error correction
+      await fetchCodeForErrorCorrection(error.message);
     }
   };
 
@@ -731,21 +754,30 @@ export default defineConfig({
   return (
     <div 
       ref={containerRef}
-      className="flex flex-col lg:flex-row w-full h-screen bg-[#0f0f12] text-white overflow-hidden"
+      className="flex flex-col lg:flex-row w-full h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 text-white overflow-hidden"
     >
       {!isFullScreen ? (
         <>
           {/* Left Panel - Code Editor */}
           <div 
-            className="flex flex-col h-full border-r border-[#2a2a32]"
+            className="flex flex-col h-full border-r border-gray-800/50"
             style={{ width: `${panelWidths.editor}%` }}
           >
             {/* File Explorer Header */}
-            <div className="flex justify-between items-center p-3 bg-[#1a1a20] border-b border-[#2a2a32]">
+            <div className="flex justify-between items-center p-3 bg-gray-900/50 backdrop-blur-sm border-b border-gray-800/50">
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => navigate('/sketchtool')}
+                  className="p-1 rounded hover:bg-gray-800/50 transition-colors"
+                  title="Back to Canvas"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                  </svg>
+                </button>
+                <button
                   onClick={() => setFileTreeVisible(!fileTreeVisible)}
-                  className="p-1 rounded hover:bg-[#3a3a42] transition-colors"
+                  className="p-1 rounded hover:bg-gray-800/50 transition-colors"
                   title={fileTreeVisible ? "Hide File Tree" : "Show File Tree"}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -753,16 +785,16 @@ export default defineConfig({
                     <path d="M7.5 3V6.39583C7.5 6.92426 7.72487 7.43097 8.11803 7.82413L10.675 10.3811C11.0682 10.7743 11.5749 10.9992 12.1033 10.9992H21" />
                   </svg>
                 </button>
-                <h2 className="text-lg font-semibold">PROJECT FILES</h2>
+                <h2 className="text-lg font-semibold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">PROJECT FILES</h2>
               </div>
               <button
                 onClick={handleReRun}
                 disabled={isBuilding}
-                className="px-3 py-1 bg-[#3a3a42] hover:bg-[#4c4c56] rounded-md text-sm flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1 bg-gray-800/50 hover:bg-gray-700/50 rounded-md text-sm flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isBuilding ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-[#4cafff] border-t-transparent rounded-full animate-spin"></div>
+                    <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
                     <span>Building...</span>
                   </>
                 ) : (
@@ -806,18 +838,18 @@ export default defineConfig({
               style={{ height: `${panelHeights.preview}%` }}
             >
               {/* Preview Header */}
-              <div className="flex justify-between items-center p-3 bg-[#1a1a20] border-b border-[#2a2a32]">
+              <div className="flex justify-between items-center p-3 bg-gray-900/50 backdrop-blur-sm border-b border-gray-800/50">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12 3H4C3.44772 3 3 3.44772 3 4V12C3 12.5523 3.44772 13 4 13H12C12.5523 13 13 12.5523 13 12V4C13 3.44772 12.5523 3 12 3Z" stroke="#4cafff" strokeWidth="1.5"/>
                     <path d="M20 11H16C15.4477 11 15 11.4477 15 12V20C15 20.5523 15.4477 21 16 21H20C20.5523 21 21 20.5523 21 20V12C21 11.4477 20.5523 11 20 11Z" stroke="#e33cef" strokeWidth="1.5"/>
                   </svg>
-                  LIVE PREVIEW
+                  <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">LIVE PREVIEW</span>
                 </h2>
                 {source && (
                   <button
                     onClick={() => setIsFullScreen(true)}
-                    className="px-3 py-1 bg-[#3a3a42] hover:bg-[#4c4c56] rounded-md text-sm flex items-center gap-1 transition-colors"
+                    className="px-3 py-1 bg-gray-800/50 hover:bg-gray-700/50 rounded-md text-sm flex items-center gap-1 transition-colors"
                   >
                     <span>Full Screen</span>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -828,13 +860,13 @@ export default defineConfig({
               </div>
               
               {/* Preview Content */}
-              <div className="flex-1 p-2 overflow-hidden bg-[#1a1a20]">
+              <div className="flex-1 p-2 overflow-hidden bg-gray-900/50 backdrop-blur-sm">
                 {!source ? (
                   <div className="w-full h-full flex flex-col justify-center items-center gap-6">
                     <div className="relative">
-                      <div className="w-16 h-16 border-4 border-[#4cafff] border-t-[#e33cef] rounded-full animate-spin"></div>
+                      <div className="w-16 h-16 border-4 border-emerald-400 border-t-cyan-400 rounded-full animate-spin"></div>
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-8 h-8 bg-gradient-to-br from-[#e33cef] to-[#4cafff] rounded-full"></div>
+                        <div className="w-8 h-8 bg-gradient-to-br from-emerald-400 to-cyan-400 rounded-full"></div>
                       </div>
                     </div>
                     <p className="text-center text-lg text-gray-300 max-w-md px-4">
@@ -860,39 +892,39 @@ export default defineConfig({
             
             {/* Terminal Section */}
             <div 
-              className="flex flex-col bg-[#16161a]"
+              className="flex flex-col bg-gray-900/50 backdrop-blur-sm"
               style={{ height: `${panelHeights.terminal}%` }}
             >
-              <div className="flex items-center p-2 bg-[#1a1a20] border-b border-[#2a2a32]">
+              <div className="flex items-center p-2 bg-gray-900/50 backdrop-blur-sm border-b border-gray-800/50">
                 <h3 className="text-sm font-medium flex items-center gap-2">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="4 17 10 11 4 5"></polyline>
                     <line x1="12" y1="19" x2="20" y2="19"></line>
                   </svg>
-                  TERMINAL OUTPUT
+                  <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">TERMINAL OUTPUT</span>
                 </h3>
               </div>
               <div 
                 ref={terminalRef}
-                className="flex-1 p-3 overflow-y-auto font-mono text-sm bg-[#0f0f12]"
+                className="flex-1 p-3 overflow-y-auto font-mono text-sm bg-gray-950/50"
               />
             </div>
           </div>
         </>
       ) : (
-        <div className="w-full h-full flex flex-col bg-[#1a1a20]">
+        <div className="w-full h-full flex flex-col bg-gray-900/50 backdrop-blur-sm">
           {/* Full Screen Preview Header */}
-          <div className="flex justify-between items-center p-3 bg-[#1a1a20] border-b border-[#2a2a32]">
+          <div className="flex justify-between items-center p-3 bg-gray-900/50 backdrop-blur-sm border-b border-gray-800/50">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 3H4C3.44772 3 3 3.44772 3 4V12C3 12.5523 3.44772 13 4 13H12C12.5523 13 13 12.5523 13 12V4C13 3.44772 12.5523 3 12 3Z" stroke="#4cafff" strokeWidth="1.5"/>
                 <path d="M20 11H16C15.4477 11 15 11.4477 15 12V20C15 20.5523 15.4477 21 16 21H20C20.5523 21 21 20.5523 21 20V12C21 11.4477 20.5523 11 20 11Z" stroke="#e33cef" strokeWidth="1.5"/>
               </svg>
-              FULL SCREEN PREVIEW
+              <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">FULL SCREEN PREVIEW</span>
             </h2>
             <button
               onClick={() => setIsFullScreen(false)}
-              className="px-3 py-1 bg-[#3a3a42] hover:bg-[#4c4c56] rounded-md text-sm flex items-center gap-1 transition-colors"
+              className="px-3 py-1 bg-gray-800/50 hover:bg-gray-700/50 rounded-md text-sm flex items-center gap-1 transition-colors"
             >
               <span>Exit Full Screen</span>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

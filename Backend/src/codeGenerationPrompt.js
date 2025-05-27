@@ -1,220 +1,13 @@
-// export default function codeGenerationPrompt(userInput = "", dependencies = "") {
-//   const baseInstructions = `# Website Generation from UI Sketch
-
-// ## Primary Task
-// Generate a beautiful, modern, and fully functional website based on the provided UI sketch or wireframe image. The sketch serves as your primary design reference - interpret it as a professional mockup and transform it into a polished, production-ready interface.
-
-// ## Design Interpretation Guidelines
-
-// ### Visual Enhancement Rules
-// - **Transform wireframes into polished UI**: Even if the sketch lacks colors or details, create a modern, visually appealing design
-// - **Color palette**: Choose a cohesive, contemporary color scheme (consider current design trends: gradients, soft shadows, modern neutrals)
-// - **Typography**: Implement a clear hierarchy with modern fonts and proper spacing
-// - **Interactive elements**: Add hover states, transitions, and micro-interactions
-// - **Responsive design**: Ensure mobile-first responsive behavior
-// - **Accessibility**: Include proper contrast ratios and semantic HTML
-
-// ### Content Interpretation
-// - **Text elements**: If text appears large in the sketch, treat as headings; smaller text as body content
-// - **Placeholder content**: Generate realistic, contextually appropriate placeholder content
-// - **Images**: Replace "Image Here" or image placeholders with relevant Unsplash URLs
-// - **Icons**: Use appropriate icons that match the design context
-
-// ${userInput ? `
-// ## Additional Context
-// User provided description: "${userInput}"
-// Use this to inform functionality, theme, or specific requirements while staying true to the sketch layout.
-// ` : ""}
-
-// ***
-// Strictly insure to write import statements correctly for ex. "import React from 'react'"
-
-
-// Requirements & Conditions:
-// Keep the code minimal yet visually appealing.
-// You have to generate altest 3000 tokens in output
-// import React only in main.jsx "import React from 'react' it is complosury 
-// Implement only one or two core functionalities.
-// Ensure an elegant, modern UI following web design principles.
-// Use only Tailwind CSS for styling.
-// use react-router-dom if possible
-// Strictly avoid unnecessary imports or unused packages.
-
-// ## Technical Implementation
-
-// ### Framework: React + Vite
-
-// **React + Vite Project Structure:**
-
-// src/
-// ├── App.jsx (main app component)
-// ├── main.jsx (entry point - import React and index.css only)
-// ├── index.css (global styles)
-// ├── components/
-// │   ├── layout/
-// │   │   ├── Header.jsx
-// │   │   ├── Footer.jsx
-// │   │   └── Layout.jsx
-// │   ├── ui/
-// │   │   ├── Button.jsx
-// │   │   ├── Card.jsx
-// │   │   └── (other reusable components)
-// │   └── sections/
-// │       ├── Hero.jsx
-// │       ├── Features.jsx
-// │       └── (page sections)
-
-
-// **Import Rules:**
-// - main.jsx: Only import React, ReactDOM, App.jsx, and index.css
-// - Use ES6 imports consistently
-// - No imports from non-existent files
-// - Component names must match file names exactly
-
-// ### Dependencies
-// **Available libraries:** ${dependencies || "None specified - use vanilla/built-in only"}
-// **Restriction:** Only use the libraries listed above. Do not import or reference any other packages.
-
-// ### Styling Requirements
-// - **CSS Framework:** ${dependencies.includes("tailwind") ? "Tailwind CSS only" : "Modern CSS with Flexbox/Grid"}
-// - **No custom CSS modules** or external stylesheets beyond what's specified
-// - **Images:** Use Unsplash URLs only (format: https://images.unsplash.com/photo-[id]?w=800&q=80)
-// - **Color scheme:** Avoid pure black backgrounds; use modern design principles
-
-// ## Quality Standards
-
-// ### Functionality Requirements
-// - **Core features:** Implement 2-3 main functionalities that match the sketch purpose
-// - **Navigation:** Working navigation between sections/pages if indicated in sketch
-// - **Interactivity:** Buttons, forms, and interactive elements should be functional
-// - **Performance:** Optimize for loading speed and smooth interactions
-
-// ### Code Quality
-// - **Clean architecture:** Component-based structure with clear separation of concerns
-// - **Error handling:** Include basic error boundaries and validation
-// - **Best practices:** Follow modern coding standards and conventions
-// - **Comments:** Add brief comments for complex logic
-
-// ### Design Quality
-// - **Visual hierarchy:** Clear information architecture
-// - **Spacing:** Consistent margins, padding, and whitespace
-// - **Consistency:** Uniform styling across components
-// - **Polish:** Professional appearance with attention to detail
-
-// ## Output Requirements
-
-// ### Technical Specifications
-// - **File structure:** Match the specified directory structure exactly
-// - **Syntax:** Zero syntax errors, validated code
-// - **Dependencies:** All imports must reference existing files/packages
-// - **Responsive:** Mobile-first design with breakpoints
-// - **Accessibility:** WCAG 2.1 AA compliance basics
-
-// ### Content Requirements
-// - **Minimum output:** Generate substantial, complete implementation (not minimal examples)
-// - **Realistic content:** Use meaningful placeholder text and relevant images
-// - **Complete features:** Don't leave functionality as "TODO" or placeholder
-
-// ## Common Pitfalls to Avoid
-// - Don't create wireframe-looking output - make it look like a real, polished website
-// - Don't use undefined imports or non-existent dependencies
-// - Don't ignore the sketch layout - it's your primary reference
-// - Don't create overly minimal implementations - build complete features
-// - Don't use placeholder text like "Lorem ipsum" - use contextually relevant content
-
-// ## Final Validation Checklist
-// ✅ Layout matches the provided sketch accurately
-// ✅ Visual design is modern and polished
-// ✅ All imports resolve to existing files/packages
-// ✅ Code runs without errors
-// ✅ Responsive design works on mobile and desktop
-// ✅ Interactive elements are functional
-// ✅ Images load properly (using Unsplash URLs)
-// ✅ Typography and spacing create clear hierarchy
-// ✅ Color scheme is cohesive and modern
-// ✅ Code follows specified file structure
-
-// ---
-
-// **Generate a complete, production-ready implementation that transforms the provided sketch into a beautiful, functional website.**`;
-
-//   // Add framework-specific output format
-//   const outputFormat = `
-
-// ## Output Format (JSON Structure)
-
-// {
-//   "src": {
-//     "directory": {
-//       "App.jsx": {
-//         "file": {
-//           "contents": "// Complete App component code"
-//         }
-//       },
-//       "main.jsx": {
-//         "file": {
-//           "contents": "// Entry point with proper imports"
-//         }
-//       },
-//       "index.css": {
-//         "file": {
-//           "contents": "/* Global styles and Tailwind imports */"
-//         }
-//       },
-//       "components": {
-//         "directory": {
-//           "layout": {
-//             "directory": {
-//               "Header.jsx": {
-//                 "file": {
-//                   "contents": "// Header component"
-//                 }
-//               },
-//               "Footer.jsx": {
-//                 "file": {
-//                   "contents": "// Footer component"
-//                 }
-//               }
-//             }
-//           },
-//           "ui": {
-//             "directory": {
-//               "Button.jsx": {
-//                 "file": {
-//                   "contents": "// Reusable button component"
-//                 }
-//               }
-//             }
-//           }
-//         }
-//       }
-//     }
-//   }
-// }
-// `;
-
-//   return baseInstructions + outputFormat;
-// }
-
 export default function codeGenerationPrompt(userInput = "", dependencies = "") {
   const baseInstructions = `# Multi-Page Website Generation from UI Sketches
 
 ## Primary Task
 Generate a beautiful, modern, and fully functional multi-page website based on the provided UI sketch or wireframe images. The sketches serve as your primary design reference - interpret them as professional mockups and transform them into a polished, production-ready interface with proper page hierarchy and navigation.
 
-## Multi-Page Analysis & Structure
-
 ### Page Hierarchy Detection
 - **Analyze all provided images** to understand the complete website structure
-- **Determine page order** based on logical user flow and common web patterns:
-  - Home/Landing page (usually has hero sections, overview content)
-  - About/Company page (team info, company details)
-  - Services/Products page (feature listings, product catalogs)
-  - Portfolio/Gallery page (showcase work, case studies)
-  - Contact page (forms, contact information)
-  - Blog/News page (article listings, content pages)
-- **Create logical navigation flow** that makes sense for user experience
-- **Identify common elements** across pages (header, footer, navigation)
+- **Strictly develop only and all the pages that are provided in the images**
+- **Generate pages dynamically** based on what is detected in the sketches, not a predetermined list
 
 ### Multi-Page Implementation Strategy
 - **Router-based navigation**: Implement proper routing between pages
@@ -225,9 +18,25 @@ Generate a beautiful, modern, and fully functional multi-page website based on t
 
 ## Design Interpretation Guidelines
 
+**you have to use Flex box for layout and different colors for different sections and use this like to apply image on the website -> 
+  1) "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80"
+  2) "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&q=80" 
+  3) "https://images.unsplash.com/photo-1461988320302-91bde64fc8e4?ixid=2yJhcHBfaWQiOjEyMDd9
+  
+  and many more images from unsplash**
+  *it is not necessaery to use these image only but always use the whenever it required to addimage on the website*
+  *it is not necessaery to use these image only but always use the whenever it required to addimage on the website*
+  *it is not necessaery to use these image only but always use the whenever it required to addimage on the website*
+  *it is not necessaery to use these image only but always use the whenever it required to addimage on the website*
+
+  *Adjust the height and width of the image as per the requirement*
+  *Adjust the height and width of the image as per the requirement*
+  *Adjust the height and width of the image as per the requirement*
+
 ### Visual Enhancement Rules
 - **Transform wireframes into polished UI**: Even if the sketch lacks colors or details, create a modern, visually appealing design
-- **if the images contains colors strictly use the colors in the images**
+- **if the images contains colors strictly use the same colors as in the images**
+- **strictly develop only the pages that are provided in the images**
 - **Consistent color palette**: Choose a cohesive, contemporary color scheme across all pages
 - **Typography hierarchy**: Implement consistent font usage and sizing across the entire site
 - **Interactive elements**: Add hover states, transitions, and micro-interactions
@@ -249,10 +58,14 @@ Use this to inform functionality, theme, or specific requirements while staying 
 
 ***
 Strictly ensure to write import statements correctly for ex. "import React from 'react'"
+Strictly ensure to write import statements correctly for ex. "import React from 'react'"
+Strictly ensure to write import statements correctly for ex. "import React from 'react'"
 
 Requirements & Conditions:
 Keep the code comprehensive yet maintainable across multiple pages.
 You have to generate at least 5000 tokens in output for multi-page implementation.
+Import React only in main.jsx "import React from 'react'" - it is compulsory.
+Import React only in main.jsx "import React from 'react'" - it is compulsory.
 Import React only in main.jsx "import React from 'react'" - it is compulsory.
 Implement complete navigation and routing functionality.
 Ensure an elegant, modern UI following web design principles across all pages.
@@ -285,12 +98,7 @@ src/
 │       ├── Features.jsx
 │       └── (page-specific sections)
 ├── pages/
-│   ├── Home.jsx
-│   ├── About.jsx
-│   ├── Services.jsx
-│   ├── Portfolio.jsx
-│   ├── Contact.jsx
-│   └── (other detected pages)
+│   └── (dynamically generated based on detected pages from sketches)
 └── utils/
     └── routes.js (route definitions)
 
@@ -351,6 +159,13 @@ src/
 5. **Contact Page**: Contact forms, location info, contact details
 6. **Blog/News Page**: Article listings, content management
 7. **FAQ/Support Page**: Help sections, documentation
+8. **Canvas/Drawing Page**: Interactive canvas, drawing tools, creative interfaces
+9. **Dashboard Page**: Analytics, data visualization, control panels
+10. **Profile/Settings Page**: User preferences, account management
+11. **Gallery/Media Page**: Image/video galleries, media showcases
+12. **Custom Pages**: Any other specific pages detected from the sketches
+
+**IMPORTANT**: Generate pages based on what you actually see in the provided sketches, not just common page types. If the sketch shows a Canvas page, generate a Canvas.jsx file. If it shows a custom page type, create that specific page.
 
 ### Navigation Structure Rules:
 - **Primary navigation**: Main pages in header/top navigation
@@ -380,6 +195,8 @@ src/
 - Don't use inconsistent design across pages
 - Don't leave pages incomplete or as placeholders
 - Don't forget to implement proper routing structure
+- **Don't hardcode page names** - generate based on actual sketch content
+- **Don't skip pages** that are shown in the sketches
 
 ## Final Validation Checklist
 ✅ All page layouts match the provided sketches accurately
@@ -393,22 +210,28 @@ src/
 ✅ Images load properly with contextually appropriate content
 ✅ Navigation clearly indicates current page
 ✅ Code follows proper multi-page architecture
+✅ **All pages from sketches are implemented** (including Canvas, Dashboard, etc.)
 
 ---
 
-**Generate a complete, production-ready multi-page website that implements all detected pages with proper routing, navigation, and consistent design language.**`;
+## Output Format (Dynamic JSON Structure)
 
-  // Add framework-specific output format
-  const outputFormat = `
+**CRITICAL**: Analyze the provided sketches first, then generate a JSON structure with ALL detected pages.
 
-## Output Format (JSON Structure)
+**Instructions:**
+1. **Identify all pages** from the provided sketches
+2. **Generate page components** for each detected page (Home.jsx, Canvas.jsx, Dashboard.jsx, etc.)
+3. **Include all supporting components** (Header, Footer, Layout, etc.)
+4. **Create complete routing** in App.jsx for all pages
+
+**Example JSON Structure:**
 
 {
   "src": {
     "directory": {
       "App.jsx": {
         "file": {
-          "contents": "// Main app component with routing setup"
+          "contents": "// Main app component with routing for ALL detected pages"
         }
       },
       "main.jsx": {
@@ -427,7 +250,7 @@ src/
             "directory": {
               "Header.jsx": {
                 "file": {
-                  "contents": "// Header component with navigation"
+                  "contents": "// Header component with navigation for all pages"
                 }
               },
               "Footer.jsx": {
@@ -437,14 +260,15 @@ src/
               },
               "Navigation.jsx": {
                 "file": {
-                  "contents": "// Navigation component"
+                  "contents": "// Navigation component for all detected pages"
                 }
               },
               "Layout.jsx": {
                 "file": {
                   "contents": "// Layout wrapper component"
                 }
-              }
+              },
+              // strictly add all the components that are present in the sketches but not present in the above format
             }
           },
           "ui": {
@@ -458,7 +282,8 @@ src/
                 "file": {
                   "contents": "// Reusable card component"
                 }
-              }
+              },
+              // strictly add all the components that are present in the sketches but not present in the above format
             }
           },
           "sections": {
@@ -472,14 +297,15 @@ src/
                 "file": {
                   "contents": "// Features section component"
                 }
-              }
+              },
+              // strictly add all the components that are present in the sketches but not present in the above format
             }
           }
         }
       },
       "pages": {
         "directory": {
-          "Home.jsx": {
+        "Home.jsx": {
             "file": {
               "contents": "// Home page component"
             }
@@ -487,33 +313,40 @@ src/
           "About.jsx": {
             "file": {
               "contents": "// About page component"
-            }
           },
-          "Services.jsx": {
-            "file": {
-              "contents": "// Services page component"
-            }
-          },
-          "Contact.jsx": {
-            "file": {
-              "contents": "// Contact page component"
-            }
-          }
+          "// NOTE: Generate all the other pages based on what you detect in the sketches": 
         }
+}
       },
       "utils": {
         "directory": {
           "routes.js": {
             "file": {
-              "contents": "// Route definitions and navigation data"
+              "contents": "// Route definitions for all detected pages"
             }
+          },
+          // strictly add all the components that are present in the sketches but not present in the above format
           }
         }
       }
     }
   }
 }
-`;
 
-  return baseInstructions + outputFormat;
+**IMPORTANT NOTES:**
+- do not include any comment in the output
+- Replace the comment placeholders in the "pages" directory with actual page components based on your sketch analysis
+- If you see a Canvas page in sketches, include "Canvas.jsx" in the pages directory
+- If you see a Dashboard page, include "Dashboard.jsx", etc.
+- Always generate the complete file contents, not just comments
+- Ensure App.jsx includes routing for ALL detected pages
+- strictly add any new pages or any UI components or any section which is not present in the above format but is present in the sketches
+- strictly add any new pages or any UI components or any section which is not present in the above format but is present in the sketches
+- strictly add any new pages or any UI components or any section which is not present in the above format but is present in the sketches
+
+**Generate a complete, production-ready multi-page website that implements ALL detected pages.**
+
+Strictly ensure to write import statements correctly for ex. "import React from 'react'"`;
+
+  return baseInstructions;
 }

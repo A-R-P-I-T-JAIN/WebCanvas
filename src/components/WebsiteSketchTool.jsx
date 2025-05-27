@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Excalidraw, exportToBlob, MainMenu, useDevice, Footer, convertToExcalidrawElements } from "@excalidraw/excalidraw";
+import { Excalidraw, exportToBlob, MainMenu, useDevice, Footer, convertToExcalidrawElements, WelcomeScreen } from "@excalidraw/excalidraw";
 import PropTypes from "prop-types";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useNavigate } from "react-router-dom";
 import { nanoid } from "nanoid";
 import axios from "axios";
+import logo from "../assets/logo.png";
 
 const WebsiteSketchTool = () => {
   const navigate = useNavigate();
@@ -26,6 +27,15 @@ const WebsiteSketchTool = () => {
   const [excalidrawApi, setExcalidrawApi] = useState(null);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
+  const loadingMessages = [
+    "Analyzing your sketches...",
+    "Detecting dependencies...",
+    "Generating responsive code...",
+    "Optimizing performance...",
+    "Adding final touches...",
+    "Almost there..."
+  ];
 
   // Initialize with one canvas
   useEffect(() => {
@@ -60,6 +70,29 @@ const WebsiteSketchTool = () => {
       });
     }
   }, [usersData]);
+
+  useEffect(() => {
+    let messageIndex = 0;
+    let interval;
+
+    if (isLoading) {
+      setLoadingMessage(loadingMessages[0]);
+      interval = setInterval(() => {
+        messageIndex = (messageIndex + 1) % loadingMessages.length;
+        if (messageIndex === loadingMessages.length - 1) {
+          clearInterval(interval);
+        } else {
+          setLoadingMessage(loadingMessages[messageIndex]);
+        }
+      }, 3000);
+    }
+
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [isLoading]);
 
   const addNewCanvas = useCallback(
     (name) => {
@@ -266,7 +299,7 @@ const WebsiteSketchTool = () => {
       formData.append(
         "userPrompt",
         userPrompt ||
-          "Create a beautiful, modern website based on the provided sketches"
+          ""
       );
       formData.append("userId", localStorage.getItem("userId"));
 
@@ -392,13 +425,13 @@ const WebsiteSketchTool = () => {
   };
 
   return (
-    <div className="website-sketch-tool min-h-screen bg-gradient-to-br from-[#0f0f12] to-[#1a1a20] text-gray-100">
-      <div className="tool-header p-6 bg-[#1a1a20] border-b border-[#2a2a32] shadow-lg">
+    <div className="website-sketch-tool min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 text-white">
+      <div className="tool-header p-6 bg-gray-900/50 backdrop-blur-sm border-b border-gray-800/50 shadow-lg">
         <div className="w-full mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <button
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className="p-2 rounded-lg hover:bg-[#2a2a32] transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-800/50 transition-colors"
             >
               <svg
                 width="24"
@@ -411,8 +444,8 @@ const WebsiteSketchTool = () => {
                 <path d="M3 12h18M3 6h18M3 18h18" />
               </svg>
             </button>
-            <h2 className="text-2xl font-bold bg-gradient-to-r from-[#4cafff] to-[#e33cef] bg-clip-text text-transparent">
-              Multi-Page Website Sketch Tool
+            <h2 onClick={() => navigate('/')} className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent cursor-pointer">
+              PixelPrompt
             </h2>
           </div>
           <div className="page-controls flex flex-col md:flex-row gap-3 w-full md:w-auto">
@@ -422,9 +455,9 @@ const WebsiteSketchTool = () => {
                 value={newPageName}
                 onChange={(e) => setNewPageName(e.target.value)}
                 placeholder="New page name (e.g., About, Services, Contact)"
-                className="w-full px-4 py-3 bg-[#2a2a32] border border-[#3a3a42] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4cafff] text-gray-100 placeholder-gray-400 transition-all duration-300 group-hover:border-[#4cafff]/50"
+                className="w-full px-4 py-3 bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 text-gray-100 placeholder-gray-400 transition-all duration-300 group-hover:border-emerald-400/50"
               />
-              <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-[#4cafff]/10 to-[#e33cef]/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+              <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-emerald-400/10 to-cyan-400/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
               {newPageName && (
                 <button
                   onClick={() => setNewPageName("")}
@@ -448,9 +481,9 @@ const WebsiteSketchTool = () => {
               <button
                 onClick={() => addNewCanvas(newPageName)}
                 disabled={!newPageName.trim()}
-                className="px-6 py-3 bg-gradient-to-r from-[#4cafff] to-[#4cafff] hover:from-[#3a9fef] hover:to-[#3a9fef] disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-all duration-300 flex items-center gap-2 group relative overflow-hidden shadow-lg"
+                className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-all duration-300 flex items-center gap-2 group relative overflow-hidden shadow-lg shadow-emerald-500/25"
               >
-                <div className="absolute inset-0 bg-gradient-to-r from-[#4cafff] to-[#e33cef] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative flex items-center gap-2">
                   <svg
                     width="18"
@@ -471,11 +504,11 @@ const WebsiteSketchTool = () => {
                 disabled={isLoading || canvases.length === 0}
                 className={`px-6 py-3 rounded-lg transition-all duration-300 flex items-center gap-2 group relative overflow-hidden shadow-lg ${
                   isLoading
-                    ? "bg-[#3a3a42] cursor-wait"
-                    : "bg-gradient-to-r from-[#e33cef] to-[#4cafff] hover:opacity-90"
+                    ? "bg-gray-800/50 cursor-wait"
+                    : "bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-700 hover:to-cyan-700 shadow-emerald-500/25"
                 }`}
               >
-                <div className="absolute inset-0 bg-gradient-to-r from-[#4cafff] to-[#e33cef] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative flex items-center gap-2">
                   {isLoading ? (
                     <>
@@ -500,7 +533,7 @@ const WebsiteSketchTool = () => {
                         <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
                         <path d="M16 21h5v-5" />
                       </svg>
-                      <span className="font-medium">Generate</span>
+                      <span className="font-medium">Generate Website</span>
                     </>
                   )}
                 </div>
@@ -513,11 +546,11 @@ const WebsiteSketchTool = () => {
       <div className="sketch-container flex h-[calc(100vh-120px)]">
         {/* Sidebar with toggle functionality */}
         <div
-          className={`page-list bg-[#1a1a20] border-r border-[#2a2a32] overflow-y-auto transition-all duration-300 ease-in-out ${
+          className={`page-list bg-gray-900/50 backdrop-blur-sm border-r border-gray-800/50 overflow-y-auto transition-all duration-300 ease-in-out ${
             isSidebarCollapsed ? "w-0 opacity-0" : "w-64 md:w-72 opacity-100"
           }`}
         >
-          <div className="page-list-header p-4 border-b border-[#2a2a32] sticky top-0 bg-[#1a1a20] z-10">
+          <div className="page-list-header p-4 border-b border-gray-800/50 sticky top-0 bg-gray-900/50 backdrop-blur-sm z-10">
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <svg
                 width="20"
@@ -539,9 +572,9 @@ const WebsiteSketchTool = () => {
           {canvases.map((canvas, index) => (
             <div
               key={canvas.id}
-              className={`page-item p-3 border-b border-[#2a2a32] cursor-pointer transition-all duration-200 hover:bg-[#2a2a32] ${
+              className={`page-item p-3 border-b border-gray-800/50 cursor-pointer transition-all duration-200 hover:bg-gray-800/50 ${
                 activeCanvasId === canvas.id
-                  ? "bg-[#2a2a32] border-l-4 border-l-[#4cafff]"
+                  ? "bg-gray-800/50 border-l-4 border-l-emerald-400"
                   : ""
               }`}
               onClick={() => setActiveCanvasId(canvas.id)}
@@ -549,11 +582,11 @@ const WebsiteSketchTool = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="relative">
-                    <span className="page-number w-6 h-6 flex items-center justify-center bg-gradient-to-br from-[#4cafff] to-[#e33cef] rounded-full text-sm font-medium">
+                    <span className="page-number w-6 h-6 flex items-center justify-center bg-gradient-to-br from-emerald-400 to-cyan-400 rounded-full text-sm font-medium">
                       {index + 1}
                     </span>
                     {(readyRefs[canvas.id] || canvas.elements?.length > 0) && (
-                      <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-[#1a1a20]"></span>
+                      <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-gray-900"></span>
                     )}
                   </div>
                   <span className="page-name font-medium truncate max-w-[120px]">
@@ -561,7 +594,7 @@ const WebsiteSketchTool = () => {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="page-elements text-xs text-gray-400 bg-[#2a2a32] px-2 py-1 rounded">
+                  <span className="page-elements text-xs text-gray-400 bg-gray-800/50 px-2 py-1 rounded">
                     {canvas.elements?.length || 0} elements
                   </span>
                   {canvases.length > 1 && (
@@ -570,7 +603,7 @@ const WebsiteSketchTool = () => {
                         e.stopPropagation();
                         removeCanvas(canvas.id);
                       }}
-                      className="delete-page p-1 hover:bg-[#3a3a42] rounded transition-colors text-gray-400 hover:text-red-400"
+                      className="delete-page p-1 hover:bg-gray-800/50 rounded transition-colors text-gray-400 hover:text-red-400"
                       title="Delete page"
                     >
                       <svg
@@ -591,11 +624,11 @@ const WebsiteSketchTool = () => {
           ))}
         </div>
 
-        <div className="canvas-area flex-1 bg-[#0f0f12] overflow-hidden relative">
+        <div className="canvas-area flex-1 bg-gray-950 overflow-hidden relative">
           {canvases.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center p-8 max-w-md">
-                <div className="w-20 h-20 mx-auto mb-6 flex items-center justify-center bg-[#2a2a32] rounded-full">
+                <div className="w-20 h-20 mx-auto mb-6 flex items-center justify-center bg-gray-800/50 backdrop-blur-sm rounded-full">
                   <svg
                     width="32"
                     height="32"
@@ -618,7 +651,7 @@ const WebsiteSketchTool = () => {
                 </p>
                 <button
                   onClick={() => addNewCanvas("Home")}
-                  className="px-6 py-3 bg-gradient-to-r from-[#4cafff] to-[#e33cef] hover:opacity-90 rounded-lg transition-all shadow-lg"
+                  className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-700 hover:to-cyan-700 rounded-lg transition-all shadow-lg shadow-emerald-500/25"
                 >
                   Add First Page
                 </button>
@@ -653,8 +686,10 @@ const WebsiteSketchTool = () => {
                   canvasActions: {
                     loadScene: false,
                     saveToActiveFile: false,
+                    
                   },
                 }}
+                gridModeEnabled={true}
                 theme="dark"
               >
                 <MainMenu>
@@ -668,7 +703,7 @@ const WebsiteSketchTool = () => {
                 <input
                   type="text"
                   className="h-10 w-full sm:w-2/3 md:w-1/2 lg:w-1/3 px-4 py-2 bg-white/5 backdrop-blur-md border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-teal-400 transition-all duration-300"
-                  placeholder="ex. a red car"
+                  placeholder="ex. footer"
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                 />
@@ -715,7 +750,7 @@ const WebsiteSketchTool = () => {
         <div className="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 backdrop-blur-sm">
           <div className="modal-content bg-[#1a1a20] rounded-xl p-6 w-full max-w-2xl shadow-2xl border border-[#3a3a42] animate-fade-in">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold bg-gradient-to-r from-[#4cafff] to-[#e33cef] bg-clip-text text-transparent">
+              <h3 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
                 Describe Your Website Vision
               </h3>
               <button
@@ -802,7 +837,7 @@ Example: Create a modern business website with professional styling, blue color 
               <button
                 onClick={handleGenerateWithPrompt}
                 disabled={isLoading}
-                className="px-6 py-2 bg-gradient-to-r from-[#4cafff] to-[#e33cef] hover:opacity-90 rounded-lg transition-all flex items-center gap-2 disabled:opacity-70"
+                className="px-6 py-2 bg-gradient-to-r from-emerald-400 to-cyan-400 hover:opacity-90 rounded-lg transition-all flex items-center gap-2 disabled:opacity-70"
               >
                 {isLoading ? (
                   <>
@@ -833,6 +868,42 @@ Example: Create a modern business website with professional styling, blue color 
         </div>
       )}
 
+      {/* Full Screen Loader */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-gray-950/50 backdrop-blur-md flex items-center justify-center z-[100]">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center space-y-8">
+            <div className="relative w-32 h-32 mx-auto">
+              {/* Outer spinning ring */}
+              <div className="absolute inset-0 border-4 border-emerald-400/20 border-t-emerald-400 rounded-full animate-spin"></div>
+              
+              {/* Inner spinning ring */}
+              <div className="absolute inset-0 border-4 border-cyan-400/20 border-t-cyan-400 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '2s' }}></div>
+              
+              {/* Center logo */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-emerald-400 to-cyan-400 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/25">
+                  <img src={logo} alt="logo" className="w-10 h-10" />
+                </div>
+              </div>    
+            </div>
+            
+            <div className="space-y-4">
+              <h3 className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+                Generating Your Website
+              </h3>
+              <p className="text-gray-400 max-w-md mx-auto min-h-[24px]">
+                {loadingMessage}
+              </p>
+              <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ToastContainer
         position="bottom-right"
         autoClose={5000}
@@ -844,8 +915,8 @@ Example: Create a modern business website with professional styling, blue color 
         draggable
         pauseOnHover
         theme="dark"
-        toastClassName="bg-[#2a2a32] border border-[#3a3a42]"
-        progressClassName="bg-gradient-to-r from-[#4cafff] to-[#e33cef]"
+        toastClassName="bg-gray-800/50 backdrop-blur-sm border border-gray-700/50"
+        progressClassName="bg-gradient-to-r from-emerald-400 to-cyan-400"
       />
     </div>
   );
