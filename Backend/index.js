@@ -1,3 +1,78 @@
+// Import the required modules
+import express from "express";
+import multer from "multer";
+import fs from "fs";
+import cors from "cors";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import dotenv from "dotenv";
+import codeGenerationPrompt from "./src/codeGenerationPrompt.js";
+import depGenerationPrompt from "./src/depGenerationPrompt.js";
+import codeErrorreductionPrompt from "./src/codeErrorreductionPrompt.js";
+import codeFixPrompt from "./src/codeFixPrompt.js";
+import { ESLint } from "eslint";
+
+dotenv.config();
+// Initialize express app
+const app = express();
+
+// Enable CORS for all routes
+app.use(
+  cors({
+    origin: [
+      "https://weblyai.vercel.app",
+      "https://weblyai.vercel.app/websitegenerator",
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "http://localhost:5175",
+    ], // Allow only your frontend domain
+    credentials: true, // Allow sending cookies/auth headers
+    methods: "GET,POST,PUT,DELETE",
+    allowedHeaders: "Content-Type,Authorization",
+  })
+);// Add CORS middleware here
+
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  next();
+});
+
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }));
+
+// Store generated data in variables
+let currentDependencies = "";
+let currentCleanedCode = "";
+let currentCommand = "echo 'No command set'";
+let userData = {};
+
+// Set up multer for handling image uploads
+const upload = multer({ dest: "uploads/" });
+
+async function lintCode(code) {
+  const eslint = new ESLint({ fix: true });
+  const results = await eslint.lintText(code);
+  return results[0].output || code; // Return fixed code or original
+}
+
+function fileToGenerativePart(path, mimeType) {
+  return {
+    inlineData: {
+      data: Buffer.from(fs.readFileSync(path)).toString("base64"),
+      mimeType,
+    },
+  };
+}
+
+function cleanJSONCode(inputCode) {
+  return inputCode
+    .replace(/^```(json|javascript|js)?[\r\n]*/gm, "")
+    .replace(/```$/gm, "")
+    .replace(/^""[\r\n]*/gm, "")
+    .replace(/^`[\r\n]*/gm, "")
+    .trim();
+}
+
 
 
 const generationConfig = {
