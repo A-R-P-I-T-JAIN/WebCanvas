@@ -80,7 +80,165 @@ const model = genAI.getGenerativeModel({
   model: "gemini-2.0-flash",
 });
 
+app.post("/api/set-command", (req, res) => {
+  const { command } = req.body;
+  if (command) {
+    currentCommand = command;
+    res.json({ success: true, message: "Command updated successfully" });
+  } else {
+    res.status(400).json({ success: false, message: "Invalid command" });
+  }
+});
 
+app.post("/api/get-user-prompt", upload.array("images", 10), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).send("No image files uploaded.");
+    }
+
+    const userPrompt = req.body.userPrompt;
+    const userId = req.body.userId;
+
+    console.log(userId, userPrompt);
+    console.log(`Processing ${req.files.length} image(s)`);
+
+    // Process all uploaded images
+    const imageParts = req.files.map(file => {
+      console.log(`Processing image: ${file.originalname}, type: ${file.mimetype}`);
+      return fileToGenerativePart(file.path, file.mimetype);
+    });
+
+    // Generate dependencies and code with all images
+    const depGenerationPromptText = depGenerationPrompt();
+    const depGenerationPromptResult = await model.generateContent([
+      depGenerationPromptText,
+      ...imageParts
+    ]);
+    
+    const currentDependenciesRaw = depGenerationPromptResult.response.text().replace("`", "").replaceAll("`$", "");
+
+    console.log("currentDependenciesRaw ---> ", currentDependenciesRaw);
+
+    const currentDependencies = await lintCode(currentDependenciesRaw);
+
+    const codeGenerationPromptText = codeGenerationPrompt(
+      userPrompt,
+      currentDependencies,
+    );
+
+    // Generate code with all images
+    const generatedCode = await model.generateContent([
+      codeGenerationPromptText, 
+      ...imageParts
+    ]);
+
+    const errorFreeGeneratePrompt = await codeErrorreductionPrompt(
+      generatedCode.response.text()
+    );
+
+    const generation_config = {
+      temperature: 0.7,
+      top_p: 0.9,
+      max_output_tokens: 7000,
+    };
+
+    const errorFreeCode = await model.generateContent(errorFreeGeneratePrompt, {
+      generationConfig: generation_config,
+    });
+    console.log("errorFreeCode ---> ", errorFreeCode.response.text());
+
+    const cleanedRawCode = await cleanJSONCode(errorFreeCode.response.text());
+    console.log("1");
+
+    const cleanedCode = await lintCode(cleanedRawCode);
+    console.log("2");
+
+    // Store user data
+    userData = {
+      ...userData,
+      [userId]: {
+        code: cleanedCode,
+        dependencies: currentDependencies,
+        imageCount: req.files.length, // Track number of images processed
+      },
+    };
+
+    // Find user data
+    const acctualData = Object.entries(userData).find(([id, usersData]) => {
+      if (id === userId) {
+        return usersData;
+      }
+    });
+
+    if (!acctualData) {
+      return res.status(404).json({ error: "User data not found" });
+    }
+
+    // Clean up uploaded files after processing (optional)
+    req.files.forEach(file => {
+      try {
+        // Uncomment the next line if you want to delete files after processing
+        // fs.unlinkSync(file.path);
+      } catch (cleanupError) {
+        console.error("Error cleaning up file:", file.path, cleanupError);
+      }
+    });
+
+    res.json({ 
+      code: acctualData[1].code, 
+      dependencies: acctualData[1].dependencies,
+      processedImages: req.files.length
+    });
+  } catch (error) {
+    console.error("Error in processing:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get("/api/get-command", async (req, res) => {
+  const { dependencies } = req.body;
+
+  res.json({
+    command: `npm install vite react@18 react-dom@18 @vitejs/plugin-react postcss@^8.4.35 tailwindcss@^3.4.1 --save-dev autoprefixer eslint react-router-dom react-icons globals@^15.0.0 ${dependencies} `,
+    secondCommand: `npm install eslint-plugin-import eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-react-refresh globals@^15.0.0 --save-dev`,
+    thirdCommand: `npm pkg set type=module`,
+    fourthCommand: `npx eslint src/**/*.{js,jsx} --format json`,
+    fifthCommand: `npx vite build --emptyOutDir`,
+  });
+});
+
+const takeInput = async (error, code, dependencies) => {
+  try {
+    const codeFixPrompts = codeFixPrompt(error, code, dependencies);
+    const someErrorFreeCode = await model.generateContent(codeFixPrompts);
+
+    const errorFreeCode = cleanJSONCode(someErrorFreeCode.response.text());
+
+    const secondVerification = await model.generateContent(
+      codeErrorreductionPrompt(errorFreeCode, error)
+    );
+
+    return cleanJSONCode(secondVerification.response.text());
+  } catch (err) {
+    console.error("Error generating content:", err);
+    return "";
+  }
+};
+
+app.post("/api/errorcorrection", async (req, res) => {
+  try {
+    const { code, error, dependencies } = req.body;
+    if (code && error) {
+      const errorFreeCode = await takeInput(error, code, dependencies);
+      const clearedCode = cleanJSONCode(errorFreeCode);
+      return res.json({ cleancode: clearedCode || "" });
+    }
+    return res.json({ cleancode: "Nothing" });
+  } catch (err) {
+    console.error("Error processing request:", err);
+    return res.status(500).json({ error: "Error processing request" });
+  }
+});
 
 
 const generationConfig = {
