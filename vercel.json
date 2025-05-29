@@ -1,0 +1,19 @@
+{
+  "rewrites": [
+    {
+      "source": "/websitegenerator",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/sketchtool",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite"
+} 
