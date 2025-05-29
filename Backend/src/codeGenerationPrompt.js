@@ -60,6 +60,7 @@ Use this to inform functionality, theme, or specific requirements while staying 
 Strictly ensure to write import statements correctly for ex. "import React from 'react'"
 Strictly ensure to write import statements correctly for ex. "import React from 'react'"
 Strictly ensure to write import statements correctly for ex. "import React from 'react'"
+Strictly ensure to write import statements correctly for ex. "import React from 'react'"
 
 Requirements & Conditions:
 Keep the code comprehensive yet maintainable across multiple pages.
