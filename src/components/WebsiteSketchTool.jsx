@@ -315,7 +315,8 @@ const WebsiteSketchTool = () => {
       });
 
       const response = await axios.post(
-        "http://localhost:3000/api/get-user-prompt",
+        // "http://localhost:3000/api/get-user-prompt",
+        "https://pixelprompt-fj7j.onrender.com/api/get-user-prompt",
         formData,
         {
           headers: {
@@ -373,8 +374,8 @@ const WebsiteSketchTool = () => {
     setLoading(true); // Set loading to true
     try {
       const response = await fetch(
-        // "https://doodlesense.onrender.com/generate",
-        "http://localhost:3000/generate",
+        // "http://localhost:3000/generate",
+        "https://pixelprompt-fj7j.onrender.com/generate",
         {
           method: "POST",
           headers: {

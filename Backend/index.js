@@ -19,8 +19,6 @@ const app = express();
 app.use(
   cors({
     origin: [
-      "https://weblyai.vercel.app",
-      "https://weblyai.vercel.app/websitegenerator",
       "http://localhost:5173",
       "http://localhost:5174",
       "http://localhost:5175",

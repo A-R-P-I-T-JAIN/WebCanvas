@@ -399,7 +399,8 @@ export default defineConfig({
   
       if (errorCode) {
         const errorFreeCode = await axios.post(
-          "http://localhost:3000/api/errorcorrection",
+          // "http://localhost:3000/api/errorcorrection",
+          "https://pixelprompt-fj7j.onrender.com/api/errorcorrection",
           {
             code: codeResponse,
             error: errorCode,
@@ -476,7 +477,8 @@ export default defineConfig({
       while (retryCount < maxRetries) {
         try {
           response = await axios.get(
-            "http://localhost:3000/api/get-command",
+            // "http://localhost:3000/api/get-command",
+            "https://pixelprompt-fj7j.onrender.com/api/get-command",
             { 
               dependencies,
               timeout: 10000, // 10 second timeout
