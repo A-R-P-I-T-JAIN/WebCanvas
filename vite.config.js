@@ -24,4 +24,7 @@ export default defineConfig({
       IS_PREACT: JSON.stringify("true"),
     },
   },
+  optimizeDeps: {
+    exclude: ['@webcontainer/api']
+  }
 });
