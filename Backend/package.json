@@ -6,8 +6,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon index.js",
-    "build": "echo \"No build step required for backend\""
+    "start": "node init && nodemon index.js",
+    "build": "node init && echo \"No build step required for backend\""
   },
   "author": "",
   "license": "ISC",
