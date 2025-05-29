@@ -577,7 +577,7 @@ export default defineConfig({
         }
       } catch (error) {
         console.error("Failed to initialize WebContainer:", error);
-        setErrors("Failed to initialize environment. Please refresh the page.");
+        setErrors("Failed to initialize environment. Please refresh the page or try a different browser .");
         // Reset the initialization attempt flag on error
         initializationAttempted.current = false;
       }
@@ -636,7 +636,7 @@ export default defineConfig({
         });
       } catch (error) {
         console.error("Error during WebContainer boot:", error);
-        setErrors("Failed to start environment. Please refresh the page.");
+        setErrors("Failed to start environment. Please refresh the page or try a different browser.");
       }
     };
 
@@ -678,7 +678,7 @@ export default defineConfig({
       setIsBuilding(false);
     } catch (error) {
       console.error("Error during rebuild:", error);
-      setErrors("Failed to rebuild project. Please check the terminal for errors.");
+      setErrors("Failed to rebuild project. Please check the terminal for errors or try a different browser.");
       setIsBuilding(false);
       
       // Trigger automatic error correction

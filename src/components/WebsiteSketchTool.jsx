@@ -22,6 +22,7 @@ const WebsiteSketchTool = () => {
   const [usersData, setUsersData] = useState({});
   const [readyRefs, setReadyRefs] = useState({});
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showBraveWarning, setShowBraveWarning] = useState(false);
   const id = nanoid(10);
   const { isMobile } = useDevice();
   const [excalidrawApi, setExcalidrawApi] = useState(null);
@@ -36,6 +37,13 @@ const WebsiteSketchTool = () => {
     "Adding final touches...",
     "Almost there..."
   ];
+
+  // Check for Brave browser
+  useEffect(() => {
+    const isBrave = navigator.userAgent.includes("Brave") || 
+                   (navigator.userAgent.includes("Chrome") && navigator.brave !== undefined);
+    setShowBraveWarning(isBrave);
+  }, []);
 
   // Initialize with one canvas
   useEffect(() => {
@@ -427,6 +435,53 @@ const WebsiteSketchTool = () => {
 
   return (
     <div className="website-sketch-tool min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 text-white">
+      {/* Brave Browser Warning Modal */}
+      {showBraveWarning && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[200]">
+          <div className="bg-[#1a1a20] rounded-xl p-8 max-w-2xl mx-4 border border-[#3a3a42] shadow-2xl">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-400">
+                  <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-red-400">Browser Compatibility Issue</h3>
+            </div>
+            <p className="text-gray-300 mb-6">
+              We've detected that you're using Brave browser. Due to security restrictions in Brave, some features of our website may not work correctly. We recommend using one of the following browsers for the best experience:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <a href="https://www.google.com/chrome/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-4 bg-[#2a2a32] rounded-lg border border-[#3a3a42] hover:border-emerald-400/50 transition-colors">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+                </svg>
+                <span>Google Chrome</span>
+              </a>
+              <a href="https://www.mozilla.org/firefox/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-4 bg-[#2a2a32] rounded-lg border border-[#3a3a42] hover:border-emerald-400/50 transition-colors">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+                </svg>
+                <span>Mozilla Firefox</span>
+              </a>
+              <a href="https://www.microsoft.com/edge" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-4 bg-[#2a2a32] rounded-lg border border-[#3a3a42] hover:border-emerald-400/50 transition-colors">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+                </svg>
+                <span>Microsoft Edge</span>
+              </a>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowBraveWarning(false)}
+                className="px-6 py-2 bg-[#3a3a42] hover:bg-[#4a4a52] rounded-lg transition-colors"
+              >
+                Continue Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="tool-header p-6 bg-gray-900/50 backdrop-blur-sm border-b border-gray-800/50 shadow-lg">
         <div className="w-full mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
