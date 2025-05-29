@@ -678,7 +678,7 @@ export default defineConfig({
       setIsBuilding(false);
     } catch (error) {
       console.error("Error during rebuild:", error);
-      setErrors("Failed to rebuild project. Please check the terminal for errors or try a different browser.");
+      setErrors("Failed to rebuild project. Please check the terminal for errors. \n Trying to fix the error...");
       setIsBuilding(false);
       
       // Trigger automatic error correction
