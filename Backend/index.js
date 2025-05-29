@@ -19,6 +19,8 @@ const app = express();
 app.use(
   cors({
     origin: [
+      "https://pixelprompt-five.vercel.app",
+      "https://pixelprompt-five.vercel.app/websitegenerator",
       "http://localhost:5173",
       "http://localhost:5174",
       "http://localhost:5175",
@@ -97,7 +99,7 @@ app.post("/api/get-user-prompt", upload.array("images", 10), async (req, res) =>
     const userPrompt = req.body.userPrompt;
     const userId = req.body.userId;
 
-    console.log(userId, userPrompt);
+    // console.log(userId, userPrompt);
     console.log(`Processing ${req.files.length} image(s)`);
 
     // Process all uploaded images
@@ -115,7 +117,7 @@ app.post("/api/get-user-prompt", upload.array("images", 10), async (req, res) =>
     
     const currentDependenciesRaw = depGenerationPromptResult.response.text().replace("`", "").replaceAll("`$", "");
 
-    console.log("currentDependenciesRaw ---> ", currentDependenciesRaw);
+    // console.log("currentDependenciesRaw ---> ", currentDependenciesRaw);
 
     const currentDependencies = await lintCode(currentDependenciesRaw);
 
@@ -143,13 +145,13 @@ app.post("/api/get-user-prompt", upload.array("images", 10), async (req, res) =>
     const errorFreeCode = await model.generateContent(errorFreeGeneratePrompt, {
       generationConfig: generation_config,
     });
-    console.log("errorFreeCode ---> ", errorFreeCode.response.text());
+    // console.log("errorFreeCode ---> ", errorFreeCode.response.text());
 
     const cleanedRawCode = await cleanJSONCode(errorFreeCode.response.text());
-    console.log("1");
+    // console.log("1");
 
     const cleanedCode = await lintCode(cleanedRawCode);
-    console.log("2");
+    // console.log("2");
 
     // Store user data
     userData = {
@@ -172,11 +174,11 @@ app.post("/api/get-user-prompt", upload.array("images", 10), async (req, res) =>
       return res.status(404).json({ error: "User data not found" });
     }
 
-    // Clean up uploaded files after processing (optional)
+    // Clean up uploaded files after processing
     req.files.forEach(file => {
       try {
-        // Uncomment the next line if you want to delete files after processing
-        // fs.unlinkSync(file.path);
+        fs.unlinkSync(file.path);
+        console.log(`Deleted file: ${file.path}`);
       } catch (cleanupError) {
         console.error("Error cleaning up file:", file.path, cleanupError);
       }
